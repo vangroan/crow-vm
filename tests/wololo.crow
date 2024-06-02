@@ -5,12 +5,12 @@
     int.push 11
     int.add
 
-    // print("Wololo {}/n", 18)
+    // print("Wololo {}/n", a)
     global   0  // push "print"
     str      1  // push "Wololo {}/n"
-    local    0  // push 18
+    local    0  // push a
     call     1 0
-}
 
-.data .string "print"
-.data .string "Wololo {}/n"
+    .data .string "print"
+    .data .string "Wololo {}/n"
+}

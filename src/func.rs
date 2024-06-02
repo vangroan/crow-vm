@@ -8,11 +8,13 @@ pub struct Func {
 
     /// Indicates whether the function takes variable arguments.
     pub(crate) is_varg: bool,
+
+    pub(crate) constants: Constants,
 }
 
 pub struct Constants {
-    ints: Box<[i64]>,
-    floats: Box<[f64]>,
-    strings: Box<[String]>,
-    funcs: Box<[Rc<Func>]>,
+    pub(crate) ints: Box<[i64]>,
+    pub(crate) floats: Box<[f64]>,
+    pub(crate) strings: Box<[String]>,
+    pub(crate) funcs: Box<[Rc<Func>]>,
 }

@@ -1,3 +1,6 @@
+use crate::errors::{runtime_err, Error, Result};
+use crate::limits::*;
+
 /// Bytecode instruction.
 #[derive(Debug, Clone, Copy)]
 #[allow(non_camel_case_types)]
@@ -7,6 +10,7 @@ pub enum Op {
 
     /// Remove and discard the top value from the stack.
     Pop,
+    End,
     Return {
         /// Number of stack values returned by the callee.
         results: u8,
@@ -32,7 +36,7 @@ pub enum Op {
         string: u16,
     },
 
-    PushInt,
+    PushInt(Arg24),
     PushFloat,
     PushString,
 
@@ -82,6 +86,31 @@ pub enum Op {
     Jump,
 }
 
+#[derive(Debug, Clone, Copy)]
+pub struct Arg24([u8; 3]);
+
+impl Arg24 {
+    #[inline(always)]
+    pub fn into_i64(self) -> i64 {
+        let [a, b, c] = self.0;
+        // Place the bytes into the most signifigant to shift
+        // down and preseve the sign.
+        i64::from_le_bytes([0, 0, 0, 0, 0, a, b, c]) >> 40
+    }
+
+    #[inline(always)]
+    pub fn from_i64(value: i64) -> Result<Self> {
+        if value >= MAX_ARG_24 {
+            Err(runtime_err("value is too large to fit in 24 bits"))
+        } else if value <= MIN_ARG24 {
+            Err(runtime_err("value is too small to fit in 24 bits"))
+        } else {
+            let [a, b, c, _, _, _, _, _] = value.to_le_bytes();
+            Ok(Self([a, b, c]))
+        }
+    }
+}
+
 #[cfg(test)]
 mod test {
     use super::*;
@@ -92,5 +121,11 @@ mod test {
             std::mem::size_of::<Op>() <= 4,
             "instruction must by at most 32-bits"
         );
+    }
+
+    #[test]
+    fn test_arg24() {
+        assert_eq!(Arg24::from_i64(1).unwrap().0, [1, 0, 0]);
+        assert_eq!(Arg24::from_i64(1).unwrap().into_i64(), 1);
     }
 }
