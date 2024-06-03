@@ -100,6 +100,19 @@ fn run_op_loop(vm: &mut Vm, frame: &mut CallFrame) -> Result<FrameAction> {
                 todo!()
             }
 
+            Op::Load{ offset, len } => {
+                let index_0 = vm.stack.len();
+                vm.stack.extend((0..len).map(|_| Slot(0)));
+
+                let start_a = frame.base + offset as usize;
+                let (a, b) = vm.stack.split_at_mut(start_a);
+
+                for (x, y) in a.iter().zip(b.iter_mut()) {
+                    *y = *x;
+                }
+            }
+            Op::Store{ offset, len } => {}
+
             Op::SetLocal { slot } => {
                 vm.stack[slot as usize] =
                     vm.stack.last().cloned().ok_or_else(err_stack_underflow)?;

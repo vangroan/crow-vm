@@ -22,6 +22,17 @@ pub enum Op {
         results: u8,
     },
 
+    /// Copy multiple values from the stack offset to the top.
+    Load {
+        offset: u16,
+        len: u8,
+    },
+    /// Copy multiple values from the top of the stack to the given offset.
+    Store{
+        offset: u16,
+        len: u8,
+    },
+
     SetLocal {
         slot: u16,
     },
