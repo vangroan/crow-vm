@@ -3,11 +3,14 @@ use std::rc::Rc;
 use crate::errors::{runtime_err, Error, Result};
 use crate::func::Func;
 use crate::op::Op;
-use crate::slot::Slot;
+use crate::slot::{IntoSlot, Slot};
 
 pub struct Vm {
     /// Operand stack.
     pub(crate) stack: Vec<Slot>,
+
+    /// Annotation metadata to mark stack slots as pointers.
+    pub pointers: Vec<bool>,
 
     /// Callstack.
     calls: Vec<CallFrame>,
@@ -28,19 +31,60 @@ enum FrameAction {
     Return { results: u8 },
 
     /// Call a new function.
-    Call {},
+    Call { base: u16, results: u8 },
 }
 
 impl Vm {
     pub fn new() -> Self {
         Self {
             stack: vec![],
+            pointers: vec![],
             calls: vec![],
         }
     }
 
     pub fn run(&mut self, _env: (), func: Rc<Func>) -> Result<()> {
         run_interpreter(self, func)
+    }
+
+    fn is_marked(&self, slot: usize) -> bool {
+        self.pointers.get(slot).cloned().unwrap_or(false)
+    }
+
+    fn mark_pointer(&mut self, index: usize) {
+        self.pointers[index] = true;
+    }
+
+    fn unmark_pointer(&mut self, index: usize) {
+        self.pointers[index] = false;
+    }
+
+    fn grow_pointer_stack(&mut self, extra_space: usize) {
+        let required = self.stack.len() + extra_space;
+        if self.pointers.len() < required {
+            self.pointers.extend((0..(required - self.pointers.len())).map(|_| false));
+        }
+    }
+
+    fn pop(&mut self) -> Result<Slot> {
+        match self.stack.pop() {
+            Some(slot) => {
+                self.pointers.pop();
+                Ok(slot)
+            },
+            None => {
+                err_stack_underflow().into()
+            },
+        }
+    }
+
+    #[inline(always)]
+    fn push<T: IntoSlot>(&mut self, value: T) {
+        if value.is_object() {
+            let index = self.stack.len();
+            self.mark_pointer(index);
+        }
+        self.stack.push(value.into_slot());
     }
 }
 
@@ -54,8 +98,16 @@ impl CallFrame {
     }
 }
 
+/// Interpreter entry point.
 fn run_interpreter(vm: &mut Vm, func: Rc<Func>) -> Result<()> {
-    let mut frame = CallFrame::new(func);
+    // Prepare stack space.
+    vm.grow_pointer_stack(func.stack_size as usize);
+
+    let mut frame = CallFrame::new(func.clone());
+
+    // To keep consistent with the calling convention,
+    // place the callable on the stack.
+    vm.push(func);
 
     loop {
         match run_op_loop(vm, &mut frame)? {
@@ -65,7 +117,27 @@ fn run_interpreter(vm: &mut Vm, func: Rc<Func>) -> Result<()> {
                 }
                 todo!("calls and returns")
             }
-            FrameAction::Call {} => todo!(),
+            FrameAction::Call { base, .. } => {
+                // base is relative to the caller's base.
+                let callee_base = frame.base + base as usize;
+
+                // A callable is expected at the callee's stack.
+                if !vm.is_marked(callee_base) {
+                    return runtime_err("callable is not a pointer").into();
+                }
+
+                let func = vm.stack[callee_base].as_func();
+
+                vm.grow_pointer_stack(func.stack_size as usize);
+
+                let new_frame = CallFrame {
+                    ip: 0,
+                    base: callee_base,
+                    func,
+                };
+
+                vm.calls.push(std::mem::replace(&mut frame, new_frame));
+            },
         }
     }
 }
@@ -85,6 +157,7 @@ fn run_op_loop(vm: &mut Vm, frame: &mut CallFrame) -> Result<FrameAction> {
         frame.ip += 1;
 
         println!("vm.stack -> {:?}", vm.stack);
+        println!("            {:?}", vm.pointers);
 
         match op {
             Op::NoOp => { /* Do nothing */ }
@@ -96,20 +169,12 @@ fn run_op_loop(vm: &mut Vm, frame: &mut CallFrame) -> Result<FrameAction> {
                 todo!()
             }
 
-            Op::Call { .. } => {
+            Op::Call { base, results } => {
                 todo!()
             }
 
             Op::Load{ offset, len } => {
-                let index_0 = vm.stack.len();
-                vm.stack.extend((0..len).map(|_| Slot(0)));
-
-                let start_a = frame.base + offset as usize;
-                let (a, b) = vm.stack.split_at_mut(start_a);
-
-                for (x, y) in a.iter().zip(b.iter_mut()) {
-                    *y = *x;
-                }
+                todo!()
             }
             Op::Store{ offset, len } => {}
 

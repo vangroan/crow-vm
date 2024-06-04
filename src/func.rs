@@ -6,6 +6,10 @@ use crate::op::Op;
 pub struct Func {
     pub(crate) code: Box<[Op]>,
 
+    /// The number of stack slots this function requires in its activation frame,
+    /// including the callable object.
+    pub(crate) stack_size: u32,
+
     /// Indicates whether the function takes variable arguments.
     pub(crate) is_varg: bool,
 

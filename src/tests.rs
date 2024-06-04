@@ -16,6 +16,7 @@ fn test_basic_math() -> Result<()> {
 
     let func = Rc::new(Func {
         code: code.iter().cloned().collect(),
+        stack_size: 3,
         is_varg: true,
         constants: Constants {
             ints: Box::new([]),
