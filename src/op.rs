@@ -28,7 +28,7 @@ pub enum Op {
         len: u8,
     },
     /// Copy multiple values from the top of the stack to the given offset.
-    Store{
+    Store {
         offset: u16,
         len: u8,
     },
@@ -88,13 +88,30 @@ pub enum Op {
     Str_Slice,
 
     // Jumps
-    JumpNe,
-    JumpEq,
-    JumpLt,
-    JumpLe,
-    JumpGt,
-    JumpGe,
-    Jump,
+    JumpNe {
+        addr: Arg24,
+    },
+    JumpEq {
+        addr: Arg24,
+    },
+    JumpLt {
+        addr: Arg24,
+    },
+    JumpLe {
+        addr: Arg24,
+    },
+    JumpGt {
+        addr: Arg24,
+    },
+    JumpGe {
+        addr: Arg24,
+    },
+    JumpZero {
+        addr: Arg24,
+    },
+    Jump {
+        addr: Arg24,
+    },
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -107,6 +124,12 @@ impl Arg24 {
         // Place the bytes into the most signifigant to shift
         // down and preseve the sign.
         i64::from_le_bytes([0, 0, 0, 0, 0, a, b, c]) >> 40
+    }
+
+    #[inline(always)]
+    pub fn into_usize(self) -> usize {
+        let [a, b, c] = self.0;
+        u32::from_le_bytes([a, b, c, 0]) as usize
     }
 
     #[inline(always)]

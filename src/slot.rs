@@ -28,7 +28,7 @@ impl Slot {
     pub fn from_string(string: Str) -> Self {
         unsafe { Self(string.as_ptr() as _) }
     }
-    
+
     #[inline(always)]
     pub fn from_func(func: Rc<Func>) -> Self {
         unsafe { Self(Rc::into_raw(func) as _) }
@@ -59,8 +59,6 @@ impl Slot {
         unsafe { Rc::from_raw(self.0 as *const Func) }
     }
 }
-
-
 
 pub trait IntoSlot {
     fn is_object(&self) -> bool;

@@ -62,7 +62,8 @@ impl Vm {
     fn grow_pointer_stack(&mut self, extra_space: usize) {
         let required = self.stack.len() + extra_space;
         if self.pointers.len() < required {
-            self.pointers.extend((0..(required - self.pointers.len())).map(|_| false));
+            self.pointers
+                .extend((0..(required - self.pointers.len())).map(|_| false));
         }
     }
 
@@ -71,10 +72,8 @@ impl Vm {
             Some(slot) => {
                 self.pointers.pop();
                 Ok(slot)
-            },
-            None => {
-                err_stack_underflow().into()
-            },
+            }
+            None => err_stack_underflow().into(),
         }
     }
 
@@ -111,8 +110,12 @@ fn run_interpreter(vm: &mut Vm, func: Rc<Func>) -> Result<()> {
 
     loop {
         match run_op_loop(vm, &mut frame)? {
-            FrameAction::Return { .. } => {
+            FrameAction::Return { results } => {
                 if vm.calls.is_empty() {
+                    for _ in 0..results {
+                        println!("return: {:?}", vm.stack.pop());
+                    }
+                    vm.stack.truncate(frame.base);
                     return Ok(());
                 }
                 todo!("calls and returns")
@@ -137,7 +140,7 @@ fn run_interpreter(vm: &mut Vm, func: Rc<Func>) -> Result<()> {
                 };
 
                 vm.calls.push(std::mem::replace(&mut frame, new_frame));
-            },
+            }
         }
     }
 }
@@ -165,18 +168,16 @@ fn run_op_loop(vm: &mut Vm, frame: &mut CallFrame) -> Result<FrameAction> {
                 vm.stack.pop();
             }
             Op::End => return Ok(FrameAction::Return { results: 0 }),
-            Op::Return { .. } => {
-                todo!()
-            }
+            Op::Return { results } => return Ok(FrameAction::Return { results }),
 
             Op::Call { base, results } => {
                 todo!()
             }
 
-            Op::Load{ offset, len } => {
+            Op::Load { offset, len } => {
                 todo!()
             }
-            Op::Store{ offset, len } => {}
+            Op::Store { offset, len } => {}
 
             Op::SetLocal { slot } => {
                 vm.stack[slot as usize] =
@@ -272,13 +273,21 @@ fn run_op_loop(vm: &mut Vm, frame: &mut CallFrame) -> Result<FrameAction> {
             Op::Str_Concat => todo!(),
             Op::Str_Slice => todo!(),
 
-            Op::JumpNe => todo!(),
-            Op::JumpEq => todo!(),
-            Op::JumpLt => todo!(),
-            Op::JumpLe => todo!(),
-            Op::JumpGt => todo!(),
-            Op::JumpGe => todo!(),
-            Op::Jump => todo!(),
+            Op::JumpNe { .. } => todo!(),
+            Op::JumpEq { .. } => todo!(),
+            Op::JumpLt { .. } => todo!(),
+            Op::JumpLe { .. } => todo!(),
+            Op::JumpGt { .. } => todo!(),
+            Op::JumpGe { .. } => todo!(),
+            Op::JumpZero { addr } => {
+                let a = vm.stack.pop().ok_or_else(err_stack_underflow)?.as_int();
+                if a == 0 {
+                    frame.ip = (frame.ip as i64 + addr.into_i64()) as usize;
+                }
+            }
+            Op::Jump { addr } => {
+                frame.ip = (frame.ip as i64 + addr.into_i64()) as usize;
+            }
         }
     }
 }
