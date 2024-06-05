@@ -106,6 +106,7 @@ fn run_interpreter(vm: &mut Vm, func: Rc<Func>) -> Result<()> {
 
     // To keep consistent with the calling convention,
     // place the callable on the stack.
+    // FIXME: Memory management to ensure this Rc<Func> isn't leaked.
     vm.push(func);
 
     loop {

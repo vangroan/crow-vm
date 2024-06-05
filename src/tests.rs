@@ -32,7 +32,7 @@ fn test_basic_math() -> Result<()> {
 
     vm.run(env, func)?;
 
-    println!("stack: {:?}", vm.stack.last().unwrap().as_int());
+    println!("stack: {:?}", vm.stack);
 
     Ok(())
 }
