@@ -9,9 +9,6 @@ pub struct Vm {
     /// Operand stack.
     pub(crate) stack: Vec<Slot>,
 
-    /// Annotation metadata to mark stack slots as pointers.
-    pub pointers: Vec<bool>,
-
     /// Callstack.
     calls: Vec<CallFrame>,
 }
@@ -19,6 +16,8 @@ pub struct Vm {
 struct CallFrame {
     /// Instruction pointer.
     ip: usize,
+    /// Pointer to the top of the stack, relative to it's local base.
+    top: usize,
     /// Stack base where the frame's local variables and temporary value start.
     base: usize,
     /// Function prototype that this frame is executing.
@@ -38,7 +37,6 @@ impl Vm {
     pub fn new() -> Self {
         Self {
             stack: vec![],
-            pointers: vec![],
             calls: vec![],
         }
     }
@@ -47,43 +45,8 @@ impl Vm {
         run_interpreter(self, func)
     }
 
-    fn is_marked(&self, slot: usize) -> bool {
-        self.pointers.get(slot).cloned().unwrap_or(false)
-    }
-
-    fn mark_pointer(&mut self, index: usize) {
-        self.pointers[index] = true;
-    }
-
-    fn unmark_pointer(&mut self, index: usize) {
-        self.pointers[index] = false;
-    }
-
-    fn grow_pointer_stack(&mut self, extra_space: usize) {
-        let required = self.stack.len() + extra_space;
-        if self.pointers.len() < required {
-            self.pointers
-                .extend((0..(required - self.pointers.len())).map(|_| false));
-        }
-    }
-
-    fn pop(&mut self) -> Result<Slot> {
-        match self.stack.pop() {
-            Some(slot) => {
-                self.pointers.pop();
-                Ok(slot)
-            }
-            None => err_stack_underflow().into(),
-        }
-    }
-
-    #[inline(always)]
-    fn push<T: IntoSlot>(&mut self, value: T) {
-        if value.is_object() {
-            let index = self.stack.len();
-            self.mark_pointer(index);
-        }
-        self.stack.push(value.into_slot());
+    fn grow_stack(&mut self, additional: usize) {
+        self.stack.extend((0..additional).map(|_| Slot(0)))
     }
 }
 
@@ -91,6 +54,7 @@ impl CallFrame {
     fn new(func: Rc<Func>) -> Self {
         Self {
             ip: 0,
+            top: 0,
             base: 0,
             func,
         }
@@ -99,15 +63,8 @@ impl CallFrame {
 
 /// Interpreter entry point.
 fn run_interpreter(vm: &mut Vm, func: Rc<Func>) -> Result<()> {
-    // Prepare stack space.
-    vm.grow_pointer_stack(func.stack_size as usize);
-
-    let mut frame = CallFrame::new(func.clone());
-
-    // To keep consistent with the calling convention,
-    // place the callable on the stack.
     // FIXME: Memory management to ensure this Rc<Func> isn't leaked.
-    vm.push(func);
+    let mut frame = CallFrame::new(func.clone());
 
     loop {
         match run_op_loop(vm, &mut frame)? {
@@ -125,17 +82,11 @@ fn run_interpreter(vm: &mut Vm, func: Rc<Func>) -> Result<()> {
                 // base is relative to the caller's base.
                 let callee_base = frame.base + base as usize;
 
-                // A callable is expected at the callee's stack.
-                if !vm.is_marked(callee_base) {
-                    return runtime_err("callable is not a pointer").into();
-                }
-
                 let func = vm.stack[callee_base].as_func();
-
-                vm.grow_pointer_stack(func.stack_size as usize);
 
                 let new_frame = CallFrame {
                     ip: 0,
+                    top: 1,
                     base: callee_base,
                     func,
                 };
@@ -151,6 +102,11 @@ fn err_stack_underflow() -> Error {
 }
 
 fn run_op_loop(vm: &mut Vm, frame: &mut CallFrame) -> Result<FrameAction> {
+    // let Vm { stack: whole_stack, .. } = vm;
+
+    // Slice has a fixed size which allows the compiler some more optimisations.
+    // let stack = &whole_stack[frame.base..];
+
     loop {
         let op = frame
             .func
@@ -161,7 +117,6 @@ fn run_op_loop(vm: &mut Vm, frame: &mut CallFrame) -> Result<FrameAction> {
         frame.ip += 1;
 
         println!("vm.stack -> {:?}", vm.stack);
-        println!("            {:?}", vm.pointers);
 
         match op {
             Op::NoOp => { /* Do nothing */ }
@@ -171,14 +126,16 @@ fn run_op_loop(vm: &mut Vm, frame: &mut CallFrame) -> Result<FrameAction> {
             Op::End => return Ok(FrameAction::Return { results: 0 }),
             Op::Return { results } => return Ok(FrameAction::Return { results }),
 
-            Op::Call { base, results } => {
+            Op::Call { .. } => {
                 todo!()
             }
 
-            Op::Load { offset, len } => {
+            Op::Load { .. } => {
                 todo!()
             }
-            Op::Store { offset, len } => {}
+            Op::Store { .. } => {
+                todo!()
+            }
 
             Op::SetLocal { slot } => {
                 vm.stack[slot as usize] =

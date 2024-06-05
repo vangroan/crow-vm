@@ -20,6 +20,13 @@ pub union Slot {
     pub(crate) object: ObjPtr,
 }
 
+impl Slot {
+    /// A slot that's considered empty.
+    pub(crate) const fn empty() -> Self {
+        Slot { uint: 0 }
+    }
+}
+
 impl fmt::Debug for Slot {
     fn fmt(&self, f: &mut Formatter) -> fmt::Result {
         let data = unsafe { self.uint };
