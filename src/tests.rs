@@ -8,8 +8,8 @@ use crate::vm::Vm;
 #[test]
 fn test_basic_math() -> Result<()> {
     let code = &[
-        Op::PushInt(Arg24::from_i64(7)?),
-        Op::PushInt(Arg24::from_i64(11)?),
+        Op::PushIntIn(Arg24::from_i64(7)?),
+        Op::PushIntIn(Arg24::from_i64(11)?),
         Op::Int_Add,
         Op::End,
     ];
@@ -41,8 +41,8 @@ fn test_basic_math() -> Result<()> {
 fn test_basic_branch() -> Result<()> {
     let code = &[
         // locals a, b
-        Op::PushInt(Arg24::from_i64(7)?),
-        Op::PushInt(Arg24::from_i64(11)?),
+        Op::PushIntIn(Arg24::from_i64(7)?),
+        Op::PushIntIn(Arg24::from_i64(11)?),
         // if a > b
         Op::GetLocal { slot: 0 },
         Op::GetLocal { slot: 1 },
@@ -51,10 +51,10 @@ fn test_basic_branch() -> Result<()> {
             addr: Arg24::from_i64(2)?,
         },
         // then return 123
-        Op::PushInt(Arg24::from_i64(123)?),
+        Op::PushIntIn(Arg24::from_i64(123)?),
         Op::Return { results: 1 },
         // else
-        Op::PushInt(Arg24::from_i64(456)?),
+        Op::PushIntIn(Arg24::from_i64(456)?),
         Op::Return { results: 1 },
         Op::End,
     ];
@@ -107,14 +107,14 @@ fn test_basic_call() -> Result<()> {
         },
         code: Box::new([
             // locals a, b
-            Op::PushInt(Arg24::from_i64(7)?),
-            Op::PushInt(Arg24::from_i64(11)?),
+            Op::PushIntIn(Arg24::from_i64(7)?),
+            Op::PushIntIn(Arg24::from_i64(11)?),
             Op::PushFunc(Arg24::from_u32(0)?),
             Op::GetLocal { slot: 1 },
             Op::GetLocal { slot: 2 },
             Op::Call {
                 base: 3,
-                results: 0,
+                results: 1,
             },
             Op::End,
         ]),

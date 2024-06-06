@@ -114,7 +114,8 @@ fn run_interpreter(vm: &mut Vm, func: Rc<Func>) -> Result<()> {
                     stack[offset] = stack[start as usize + offset].clone();
                 }
 
-                vm.stack.truncate(vm.stack.len() - frame.base + results);
+                vm.stack.truncate(frame.base + results);
+                println!("vm.stack (after truncate) -> {:?}", vm.stack);
 
                 frame = vm.calls.pop().unwrap();
             }
@@ -179,13 +180,14 @@ fn run_op_loop(vm: &mut Vm, frame: &mut CallFrame) -> Result<FrameAction> {
             }
             Op::End => return Ok(FrameAction::Return { start: 0, count: 0 }),
             Op::Return { results: count } => {
-                let start = vm.stack.len() - count as usize;
+                // Top values on stack are considered the return values.
+                let start = vm.stack.len() - frame.base - count as usize;
                 return Ok(FrameAction::Return { start, count });
             }
 
             Op::Call { base, results } => {
                 return Ok(FrameAction::Call {
-                    base: base as usize,
+                    base: frame.base + base as usize,
                     results,
                 })
             }
@@ -208,11 +210,12 @@ fn run_op_loop(vm: &mut Vm, frame: &mut CallFrame) -> Result<FrameAction> {
             Op::SetGlobal { .. } => todo!(),
             Op::GetGlobal { .. } => todo!(),
 
-            Op::PushInt(value) => {
+            Op::PushIntIn(value) => {
                 vm.stack.push(Value::Int(value.into_i64()));
             }
-            Op::PushFloat => todo!(),
-            Op::PushString => todo!(),
+            Op::PushInt(_const_id) => todo!(),
+            Op::PushFloat(_const_id) => todo!(),
+            Op::PushString(_const_id) => todo!(),
             Op::PushFunc(const_id) => {
                 let func = frame
                     .func

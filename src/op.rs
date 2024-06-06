@@ -12,13 +12,16 @@ pub enum Op {
     Pop(Arg24),
     End,
     Return {
-        /// Number of stack values returned by the callee.
+        /// Actual number of result values returned by the callee.
         results: u8,
     },
 
+    /// Call either a script or native function.
     Call {
         /// Stack base relative to the caller's stack base.
         base: u16,
+        /// Number of result values the caller expects to be returned
+        /// from the callee.
         results: u8,
     },
 
@@ -47,9 +50,12 @@ pub enum Op {
         string: u16,
     },
 
+    /// Push an inlined integer value onto the stack.
+    PushIntIn(Arg24),
+    /// Push an integer constant onto the stack.
     PushInt(Arg24),
-    PushFloat,
-    PushString,
+    PushFloat(Arg24),
+    PushString(Arg24),
     PushFunc(Arg24),
 
     // Integer arithmetic.
