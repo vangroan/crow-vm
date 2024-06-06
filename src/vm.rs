@@ -3,11 +3,11 @@ use std::rc::Rc;
 use crate::errors::{runtime_err, Error, Result};
 use crate::func::Func;
 use crate::op::Op;
-use crate::slot::{IntoSlot, Slot};
+use crate::value::Value;
 
 pub struct Vm {
     /// Operand stack.
-    pub(crate) stack: Vec<Slot>,
+    pub(crate) stack: Vec<Value>,
 
     /// Callstack.
     calls: Vec<CallFrame>,
@@ -20,6 +20,8 @@ struct CallFrame {
     top: usize,
     /// Stack base where the frame's local variables and temporary value start.
     base: usize,
+    /// The number of resulting values the caller expects from the callee.
+    results: usize,
     /// Function prototype that this frame is executing.
     func: Rc<Func>,
 }
@@ -27,10 +29,10 @@ struct CallFrame {
 #[derive(Debug)]
 enum FrameAction {
     /// Return from the child frame to the parent frame.
-    Return { results: u8 },
+    Return { start: usize, count: u8 },
 
     /// Call a new function.
-    Call { base: u16, results: u8 },
+    Call { base: usize, results: u8 },
 }
 
 impl Vm {
@@ -46,7 +48,7 @@ impl Vm {
     }
 
     fn grow_stack(&mut self, additional: usize) {
-        self.stack.extend((0..additional).map(|_| Slot(0)))
+        self.stack.extend((0..additional).map(|_| Value::Int(0)))
     }
 }
 
@@ -56,6 +58,7 @@ impl CallFrame {
             ip: 0,
             top: 0,
             base: 0,
+            results: 0,
             func,
         }
     }
@@ -66,29 +69,70 @@ fn run_interpreter(vm: &mut Vm, func: Rc<Func>) -> Result<()> {
     // FIXME: Memory management to ensure this Rc<Func> isn't leaked.
     let mut frame = CallFrame::new(func.clone());
 
+    vm.stack.push(Value::new_func(frame.func.clone()));
+
     loop {
         match run_op_loop(vm, &mut frame)? {
-            FrameAction::Return { results } => {
+            FrameAction::Return { start, count } => {
+                println!(
+                    "return: frame.base->{}, slot->{:?}",
+                    frame.base, vm.stack[frame.base]
+                );
+
+                // Drop callable to decrement reference count.
+                // let _ = vm.stack[frame.base].as_func();
+
                 if vm.calls.is_empty() {
-                    for _ in 0..results {
+                    for _ in 0..count {
                         println!("return: {:?}", vm.stack.pop());
                     }
                     vm.stack.truncate(frame.base);
                     return Ok(());
                 }
-                todo!("calls and returns")
+
+                // Copy the multiple returns to the base of the stack.
+                // Erase the callable.
+                //
+                // The caller may be expecting less or more results
+                // than what the callee is actually returning.
+                if frame.results > (count as usize) {
+                    return runtime_err(format!(
+                        "caller expected {} results, but callee only returned {count}",
+                        frame.results
+                    ))
+                    .into();
+                }
+
+                // The callee may return more results, but the caller can just discard them.
+                let results = frame.results.min(count as usize);
+
+                let stack = &mut vm.stack[frame.base..frame.base + frame.func.stack_size as usize];
+                let result_span = 0..results;
+
+                // Copy the callee's results to its base, so they're available to the callee.
+                for offset in result_span {
+                    stack[offset] = stack[start as usize + offset].clone();
+                }
+
+                vm.stack.truncate(vm.stack.len() - frame.base + results);
+
+                frame = vm.calls.pop().unwrap();
             }
-            FrameAction::Call { base, .. } => {
+            FrameAction::Call { base, results } => {
                 // base is relative to the caller's base.
                 let callee_base = frame.base + base as usize;
+                let slot = vm.stack[callee_base].clone();
 
-                let func = vm.stack[callee_base].as_func();
+                println!("call: frame.base->{}, callee_base->{:?}", frame.base, slot);
 
                 let new_frame = CallFrame {
                     ip: 0,
                     top: 1,
                     base: callee_base,
-                    func,
+                    results: results as usize,
+                    func: vm.stack[callee_base]
+                        .to_func()
+                        .ok_or_else(err_func_expected)?,
                 };
 
                 vm.calls.push(std::mem::replace(&mut frame, new_frame));
@@ -99,6 +143,14 @@ fn run_interpreter(vm: &mut Vm, func: Rc<Func>) -> Result<()> {
 
 fn err_stack_underflow() -> Error {
     runtime_err("stack underflow")
+}
+
+fn err_func_expected() -> Error {
+    runtime_err("function value expected")
+}
+
+fn err_int_expected() -> Error {
+    runtime_err("integer value expected")
 }
 
 fn run_op_loop(vm: &mut Vm, frame: &mut CallFrame) -> Result<FrameAction> {
@@ -120,14 +172,22 @@ fn run_op_loop(vm: &mut Vm, frame: &mut CallFrame) -> Result<FrameAction> {
 
         match op {
             Op::NoOp => { /* Do nothing */ }
-            Op::Pop => {
-                vm.stack.pop();
+            Op::Pop(n) => {
+                for _ in 0..n.into_u32() {
+                    vm.stack.pop();
+                }
             }
-            Op::End => return Ok(FrameAction::Return { results: 0 }),
-            Op::Return { results } => return Ok(FrameAction::Return { results }),
+            Op::End => return Ok(FrameAction::Return { start: 0, count: 0 }),
+            Op::Return { results: count } => {
+                let start = vm.stack.len() - count as usize;
+                return Ok(FrameAction::Return { start, count });
+            }
 
-            Op::Call { .. } => {
-                todo!()
+            Op::Call { base, results } => {
+                return Ok(FrameAction::Call {
+                    base: base as usize,
+                    results,
+                })
             }
 
             Op::Load { .. } => {
@@ -142,76 +202,200 @@ fn run_op_loop(vm: &mut Vm, frame: &mut CallFrame) -> Result<FrameAction> {
                     vm.stack.last().cloned().ok_or_else(err_stack_underflow)?;
             }
             Op::GetLocal { slot } => {
-                vm.stack.push(vm.stack[slot as usize]);
+                vm.stack.push(vm.stack[slot as usize].clone());
             }
 
             Op::SetGlobal { .. } => todo!(),
             Op::GetGlobal { .. } => todo!(),
 
             Op::PushInt(value) => {
-                vm.stack.push(Slot::from_int(value.into_i64()));
+                vm.stack.push(Value::Int(value.into_i64()));
             }
             Op::PushFloat => todo!(),
             Op::PushString => todo!(),
+            Op::PushFunc(const_id) => {
+                let func = frame
+                    .func
+                    .constants
+                    .funcs
+                    .get(const_id.into_usize())
+                    .ok_or_else(|| {
+                        runtime_err(format!(
+                            "no function found at constant {}",
+                            const_id.into_usize()
+                        ))
+                    })?;
+                vm.stack.push(Value::new_func(func.clone()));
+            }
             Op::Int_Neq => {
-                let a = vm.stack[frame.ip].as_int();
-                vm.stack[frame.ip] = Slot::from_int(-a);
+                let a = vm.stack[frame.ip].as_int().ok_or_else(err_int_expected)?;
+                vm.stack[frame.ip] = Value::Int(-a);
             }
             Op::Int_Add => {
-                let b = vm.stack.pop().ok_or_else(err_stack_underflow)?.as_int();
-                let a = vm.stack.pop().ok_or_else(err_stack_underflow)?.as_int();
-                vm.stack.push(Slot::from_int(a + b));
+                let b = vm
+                    .stack
+                    .pop()
+                    .ok_or_else(err_stack_underflow)?
+                    .as_int()
+                    .ok_or_else(err_int_expected)?;
+                let a = vm
+                    .stack
+                    .pop()
+                    .ok_or_else(err_stack_underflow)?
+                    .as_int()
+                    .ok_or_else(err_int_expected)?;
+                vm.stack.push(Value::Int(a + b));
             }
             Op::Int_Sub => {
-                let b = vm.stack.pop().ok_or_else(err_stack_underflow)?.as_int();
-                let a = vm.stack.pop().ok_or_else(err_stack_underflow)?.as_int();
-                vm.stack.push(Slot::from_int(a - b));
+                let b = vm
+                    .stack
+                    .pop()
+                    .ok_or_else(err_stack_underflow)?
+                    .as_int()
+                    .ok_or_else(err_int_expected)?;
+                let a = vm
+                    .stack
+                    .pop()
+                    .ok_or_else(err_stack_underflow)?
+                    .as_int()
+                    .ok_or_else(err_int_expected)?;
+                vm.stack.push(Value::Int(a - b));
             }
             Op::Int_Mul => {
-                let b = vm.stack.pop().ok_or_else(err_stack_underflow)?.as_int();
-                let a = vm.stack.pop().ok_or_else(err_stack_underflow)?.as_int();
-                vm.stack.push(Slot::from_int(a * b));
+                let b = vm
+                    .stack
+                    .pop()
+                    .ok_or_else(err_stack_underflow)?
+                    .as_int()
+                    .ok_or_else(err_int_expected)?;
+                let a = vm
+                    .stack
+                    .pop()
+                    .ok_or_else(err_stack_underflow)?
+                    .as_int()
+                    .ok_or_else(err_int_expected)?;
+                vm.stack.push(Value::Int(a * b));
             }
             Op::Int_Div => {
-                let b = vm.stack.pop().ok_or_else(err_stack_underflow)?.as_int();
-                let a = vm.stack.pop().ok_or_else(err_stack_underflow)?.as_int();
-                vm.stack.push(Slot::from_int(a / b));
+                let b = vm
+                    .stack
+                    .pop()
+                    .ok_or_else(err_stack_underflow)?
+                    .as_int()
+                    .ok_or_else(err_int_expected)?;
+                let a = vm
+                    .stack
+                    .pop()
+                    .ok_or_else(err_stack_underflow)?
+                    .as_int()
+                    .ok_or_else(err_int_expected)?;
+                vm.stack.push(Value::Int(a / b));
             }
             Op::Int_Mod => {
-                let b = vm.stack.pop().ok_or_else(err_stack_underflow)?.as_int();
-                let a = vm.stack.pop().ok_or_else(err_stack_underflow)?.as_int();
-                vm.stack.push(Slot::from_int(a % b));
+                let b = vm
+                    .stack
+                    .pop()
+                    .ok_or_else(err_stack_underflow)?
+                    .as_int()
+                    .ok_or_else(err_int_expected)?;
+                let a = vm
+                    .stack
+                    .pop()
+                    .ok_or_else(err_stack_underflow)?
+                    .as_int()
+                    .ok_or_else(err_int_expected)?;
+                vm.stack.push(Value::Int(a % b));
             }
 
             Op::Int_Ne => {
-                let b = vm.stack.pop().ok_or_else(err_stack_underflow)?.as_int();
-                let a = vm.stack.pop().ok_or_else(err_stack_underflow)?.as_int();
-                vm.stack.push(Slot::from_bool(a != b));
+                let b = vm
+                    .stack
+                    .pop()
+                    .ok_or_else(err_stack_underflow)?
+                    .as_int()
+                    .ok_or_else(err_int_expected)?;
+                let a = vm
+                    .stack
+                    .pop()
+                    .ok_or_else(err_stack_underflow)?
+                    .as_int()
+                    .ok_or_else(err_int_expected)?;
+                vm.stack.push(Value::new_bool(a != b));
             }
             Op::Int_Eq => {
-                let b = vm.stack.pop().ok_or_else(err_stack_underflow)?.as_int();
-                let a = vm.stack.pop().ok_or_else(err_stack_underflow)?.as_int();
-                vm.stack.push(Slot::from_bool(a == b));
+                let b = vm
+                    .stack
+                    .pop()
+                    .ok_or_else(err_stack_underflow)?
+                    .as_int()
+                    .ok_or_else(err_int_expected)?;
+                let a = vm
+                    .stack
+                    .pop()
+                    .ok_or_else(err_stack_underflow)?
+                    .as_int()
+                    .ok_or_else(err_int_expected)?;
+                vm.stack.push(Value::new_bool(a == b));
             }
             Op::Int_Lt => {
-                let b = vm.stack.pop().ok_or_else(err_stack_underflow)?.as_int();
-                let a = vm.stack.pop().ok_or_else(err_stack_underflow)?.as_int();
-                vm.stack.push(Slot::from_bool(a < b));
+                let b = vm
+                    .stack
+                    .pop()
+                    .ok_or_else(err_stack_underflow)?
+                    .as_int()
+                    .ok_or_else(err_int_expected)?;
+                let a = vm
+                    .stack
+                    .pop()
+                    .ok_or_else(err_stack_underflow)?
+                    .as_int()
+                    .ok_or_else(err_int_expected)?;
+                vm.stack.push(Value::new_bool(a < b));
             }
             Op::Int_Le => {
-                let b = vm.stack.pop().ok_or_else(err_stack_underflow)?.as_int();
-                let a = vm.stack.pop().ok_or_else(err_stack_underflow)?.as_int();
-                vm.stack.push(Slot::from_bool(a <= b));
+                let b = vm
+                    .stack
+                    .pop()
+                    .ok_or_else(err_stack_underflow)?
+                    .as_int()
+                    .ok_or_else(err_int_expected)?;
+                let a = vm
+                    .stack
+                    .pop()
+                    .ok_or_else(err_stack_underflow)?
+                    .as_int()
+                    .ok_or_else(err_int_expected)?;
+                vm.stack.push(Value::new_bool(a <= b));
             }
             Op::Int_Gt => {
-                let b = vm.stack.pop().ok_or_else(err_stack_underflow)?.as_int();
-                let a = vm.stack.pop().ok_or_else(err_stack_underflow)?.as_int();
-                vm.stack.push(Slot::from_bool(a > b));
+                let b = vm
+                    .stack
+                    .pop()
+                    .ok_or_else(err_stack_underflow)?
+                    .as_int()
+                    .ok_or_else(err_int_expected)?;
+                let a = vm
+                    .stack
+                    .pop()
+                    .ok_or_else(err_stack_underflow)?
+                    .as_int()
+                    .ok_or_else(err_int_expected)?;
+                vm.stack.push(Value::new_bool(a > b));
             }
             Op::Int_Ge => {
-                let b = vm.stack.pop().ok_or_else(err_stack_underflow)?.as_int();
-                let a = vm.stack.pop().ok_or_else(err_stack_underflow)?.as_int();
-                vm.stack.push(Slot::from_bool(a >= b));
+                let b = vm
+                    .stack
+                    .pop()
+                    .ok_or_else(err_stack_underflow)?
+                    .as_int()
+                    .ok_or_else(err_int_expected)?;
+                let a = vm
+                    .stack
+                    .pop()
+                    .ok_or_else(err_stack_underflow)?
+                    .as_int()
+                    .ok_or_else(err_int_expected)?;
+                vm.stack.push(Value::new_bool(a >= b));
             }
 
             Op::Float_Neq => todo!(),
@@ -238,7 +422,12 @@ fn run_op_loop(vm: &mut Vm, frame: &mut CallFrame) -> Result<FrameAction> {
             Op::JumpGt { .. } => todo!(),
             Op::JumpGe { .. } => todo!(),
             Op::JumpZero { addr } => {
-                let a = vm.stack.pop().ok_or_else(err_stack_underflow)?.as_int();
+                let a = vm
+                    .stack
+                    .pop()
+                    .ok_or_else(err_stack_underflow)?
+                    .as_int()
+                    .ok_or_else(err_int_expected)?;
                 if a == 0 {
                     frame.ip = (frame.ip as i64 + addr.into_i64()) as usize;
                 }

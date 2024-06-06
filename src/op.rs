@@ -9,7 +9,7 @@ pub enum Op {
     NoOp,
 
     /// Remove and discard the top value from the stack.
-    Pop,
+    Pop(Arg24),
     End,
     Return {
         /// Number of stack values returned by the callee.
@@ -50,6 +50,7 @@ pub enum Op {
     PushInt(Arg24),
     PushFloat,
     PushString,
+    PushFunc(Arg24),
 
     // Integer arithmetic.
     Int_Neq,
@@ -114,6 +115,12 @@ pub enum Op {
     },
 }
 
+impl Op {
+    pub fn stack_effect(&self) -> isize {
+        todo!()
+    }
+}
+
 #[derive(Debug, Clone, Copy)]
 pub struct Arg24([u8; 3]);
 
@@ -124,6 +131,12 @@ impl Arg24 {
         // Place the bytes into the most signifigant to shift
         // down and preseve the sign.
         i64::from_le_bytes([0, 0, 0, 0, 0, a, b, c]) >> 40
+    }
+
+    #[inline(always)]
+    pub fn into_u32(self) -> u32 {
+        let [a, b, c] = self.0;
+        u32::from_le_bytes([a, b, c, 0])
     }
 
     #[inline(always)]
@@ -142,6 +155,12 @@ impl Arg24 {
             let [a, b, c, _, _, _, _, _] = value.to_le_bytes();
             Ok(Self([a, b, c]))
         }
+    }
+
+    #[inline(always)]
+    pub fn from_u32(value: u32) -> Result<Self> {
+        let [a, b, c, _] = value.to_le_bytes();
+        Ok(Self([a, b, c]))
     }
 }
 

@@ -56,7 +56,7 @@ impl Slot {
 
     #[inline(always)]
     pub fn as_func(self) -> Rc<Func> {
-        unsafe { Rc::from_raw(self.0 as *const Func) }
+        unsafe { Rc::from_raw(self.0 as *const _) }
     }
 }
 
