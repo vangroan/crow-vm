@@ -29,9 +29,13 @@ struct CallFrame {
 #[derive(Debug)]
 enum FrameAction {
     /// Return from the child frame to the parent frame.
+    ///
+    /// Start of results on start is absolute.
     Return { start: usize, count: u8 },
 
     /// Call a new function.
+    ///
+    /// Base of stack is absolute.
     Call { base: usize, results: u8 },
 }
 
@@ -91,9 +95,9 @@ fn run_interpreter(vm: &mut Vm, func: Rc<Func>) -> Result<()> {
                 }
 
                 // Copy the multiple returns to the base of the stack.
-                // Erase the callable.
+                // Erasing the callable.
                 //
-                // The caller may be expecting less or more results
+                // The caller may be expecting more results
                 // than what the callee is actually returning.
                 if frame.results > (count as usize) {
                     return runtime_err(format!(
@@ -103,18 +107,24 @@ fn run_interpreter(vm: &mut Vm, func: Rc<Func>) -> Result<()> {
                     .into();
                 }
 
-                // The callee may return more results, but the caller can just discard them.
-                let results = frame.results.min(count as usize);
+                // The callee may return more results, but the caller could just discard them.
+                let result_count = frame.results.min(count as usize);
 
+                // Slice the stack to the callee's span so it's easier to work with.
                 let stack = &mut vm.stack[frame.base..frame.base + frame.func.stack_size as usize];
-                let result_span = 0..results;
 
-                // Copy the callee's results to its base, so they're available to the callee.
-                for offset in result_span {
+                // This overflow can happen if the bytecode is malformed.
+                // (Result instruction returned wrong count)
+                if start + result_count > stack.len() {
+                    return runtime_err("returned results overflow stack").into();
+                }
+
+                // Copy the callee's results to its base, so they're available to the caller.
+                for offset in 0..result_count {
                     stack[offset] = stack[start as usize + offset].clone();
                 }
 
-                vm.stack.truncate(frame.base + results);
+                vm.stack.truncate(frame.base + result_count);
                 println!("vm.stack (after truncate) -> {:?}", vm.stack);
 
                 frame = vm.calls.pop().unwrap();

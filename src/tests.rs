@@ -39,28 +39,7 @@ fn test_basic_math() -> Result<()> {
 
 #[test]
 fn test_basic_branch() -> Result<()> {
-    let code = &[
-        // locals a, b
-        Op::PushIntIn(Arg24::from_i64(7)?),
-        Op::PushIntIn(Arg24::from_i64(11)?),
-        // if a > b
-        Op::GetLocal { slot: 0 },
-        Op::GetLocal { slot: 1 },
-        Op::Int_Lt,
-        Op::JumpZero {
-            addr: Arg24::from_i64(2)?,
-        },
-        // then return 123
-        Op::PushIntIn(Arg24::from_i64(123)?),
-        Op::Return { results: 1 },
-        // else
-        Op::PushIntIn(Arg24::from_i64(456)?),
-        Op::Return { results: 1 },
-        Op::End,
-    ];
-
     let func = Rc::new(Func {
-        code: code.iter().cloned().collect(),
         stack_size: 4,
         is_varg: true,
         constants: Constants {
@@ -69,6 +48,25 @@ fn test_basic_branch() -> Result<()> {
             strings: Box::new([]),
             funcs: Box::new([]),
         },
+        code: Box::new([
+            // locals a, b
+            Op::PushIntIn(Arg24::from_i64(7)?),
+            Op::PushIntIn(Arg24::from_i64(11)?),
+            // if a > b
+            Op::GetLocal { slot: 1 },
+            Op::GetLocal { slot: 2 },
+            Op::Int_Lt,
+            Op::JumpZero {
+                addr: Arg24::from_i64(2)?,
+            },
+            // then return 123
+            Op::PushIntIn(Arg24::from_i64(123)?),
+            Op::Return { results: 1 },
+            // else
+            Op::PushIntIn(Arg24::from_i64(456)?),
+            Op::Return { results: 1 },
+            Op::End,
+        ]),
     });
 
     let env = ();
