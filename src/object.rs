@@ -2,7 +2,7 @@ use std::ptr::NonNull;
 
 /// Pointer to an object.
 #[derive(Debug, Clone, Copy)]
-pub struct ObjPtr(NonNull<Object>);
+pub struct ObjPtr(pub(crate) NonNull<Object>);
 
 #[derive(Debug, Clone, Copy)]
 pub enum ObjectKind {

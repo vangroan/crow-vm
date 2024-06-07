@@ -54,6 +54,46 @@ impl Vm {
     fn grow_stack(&mut self, additional: usize) {
         self.stack.extend((0..additional).map(|_| Value::Int(0)))
     }
+
+    fn pop_int(&mut self) -> Result<i64> {
+        self.stack
+            .pop()
+            .ok_or_else(err_stack_underflow)?
+            .as_int()
+            .ok_or_else(err_int_expected)
+    }
+
+    fn pop2_int(&mut self) -> Result<[i64; 2]> {
+        let b = self
+            .stack
+            .pop()
+            .ok_or_else(err_stack_underflow)?
+            .as_int()
+            .ok_or_else(err_int_expected)?;
+        let a = self
+            .stack
+            .pop()
+            .ok_or_else(err_stack_underflow)?
+            .as_int()
+            .ok_or_else(err_int_expected)?;
+        Ok([a, b])
+    }
+
+    fn pop2_float(&mut self) -> Result<[f64; 2]> {
+        let b = self
+            .stack
+            .pop()
+            .ok_or_else(err_stack_underflow)?
+            .as_float()
+            .ok_or_else(err_float_expected)?;
+        let a = self
+            .stack
+            .pop()
+            .ok_or_else(err_stack_underflow)?
+            .as_float()
+            .ok_or_else(err_float_expected)?;
+        Ok([a, b])
+    }
 }
 
 impl CallFrame {
@@ -68,12 +108,18 @@ impl CallFrame {
     }
 }
 
+impl CallFrame {
+    fn jump(&mut self, offset: i64) {
+        self.ip = (self.ip as i64 + offset) as usize;
+    }
+}
+
 /// Interpreter entry point.
 fn run_interpreter(vm: &mut Vm, func: Rc<Func>) -> Result<()> {
     // FIXME: Memory management to ensure this Rc<Func> isn't leaked.
     let mut frame = CallFrame::new(func.clone());
 
-    vm.stack.push(Value::new_func(frame.func.clone()));
+    vm.stack.push(Value::from_func(frame.func.clone()));
 
     loop {
         match run_op_loop(vm, &mut frame)? {
@@ -164,6 +210,10 @@ fn err_int_expected() -> Error {
     runtime_err("integer value expected")
 }
 
+fn err_float_expected() -> Error {
+    runtime_err("float value expected")
+}
+
 fn run_op_loop(vm: &mut Vm, frame: &mut CallFrame) -> Result<FrameAction> {
     // let Vm { stack: whole_stack, .. } = vm;
 
@@ -223,7 +273,20 @@ fn run_op_loop(vm: &mut Vm, frame: &mut CallFrame) -> Result<FrameAction> {
             Op::PushIntIn(value) => {
                 vm.stack.push(Value::Int(value.into_i64()));
             }
-            Op::PushInt(_const_id) => todo!(),
+            Op::PushInt(const_id) => {
+                let x = *frame
+                    .func
+                    .constants
+                    .ints
+                    .get(const_id.into_usize())
+                    .ok_or_else(|| {
+                        runtime_err(format!(
+                            "no integer constant defined: {}",
+                            const_id.into_usize()
+                        ))
+                    })?;
+                vm.stack.push(Value::Int(x));
+            }
             Op::PushFloat(_const_id) => todo!(),
             Op::PushString(_const_id) => todo!(),
             Op::PushFunc(const_id) => {
@@ -238,216 +301,149 @@ fn run_op_loop(vm: &mut Vm, frame: &mut CallFrame) -> Result<FrameAction> {
                             const_id.into_usize()
                         ))
                     })?;
-                vm.stack.push(Value::new_func(func.clone()));
+                vm.stack.push(Value::from_func(func.clone()));
             }
-            Op::Int_Neq => {
+            Op::Int_Neg => {
                 let a = vm.stack[frame.ip].as_int().ok_or_else(err_int_expected)?;
                 vm.stack[frame.ip] = Value::Int(-a);
             }
             Op::Int_Add => {
-                let b = vm
-                    .stack
-                    .pop()
-                    .ok_or_else(err_stack_underflow)?
-                    .as_int()
-                    .ok_or_else(err_int_expected)?;
-                let a = vm
-                    .stack
-                    .pop()
-                    .ok_or_else(err_stack_underflow)?
-                    .as_int()
-                    .ok_or_else(err_int_expected)?;
+                let [a, b] = vm.pop2_int()?;
                 vm.stack.push(Value::Int(a + b));
             }
             Op::Int_Sub => {
-                let b = vm
-                    .stack
-                    .pop()
-                    .ok_or_else(err_stack_underflow)?
-                    .as_int()
-                    .ok_or_else(err_int_expected)?;
-                let a = vm
-                    .stack
-                    .pop()
-                    .ok_or_else(err_stack_underflow)?
-                    .as_int()
-                    .ok_or_else(err_int_expected)?;
+                let [a, b] = vm.pop2_int()?;
                 vm.stack.push(Value::Int(a - b));
             }
             Op::Int_Mul => {
-                let b = vm
-                    .stack
-                    .pop()
-                    .ok_or_else(err_stack_underflow)?
-                    .as_int()
-                    .ok_or_else(err_int_expected)?;
-                let a = vm
-                    .stack
-                    .pop()
-                    .ok_or_else(err_stack_underflow)?
-                    .as_int()
-                    .ok_or_else(err_int_expected)?;
+                let [a, b] = vm.pop2_int()?;
                 vm.stack.push(Value::Int(a * b));
             }
             Op::Int_Div => {
-                let b = vm
-                    .stack
-                    .pop()
-                    .ok_or_else(err_stack_underflow)?
-                    .as_int()
-                    .ok_or_else(err_int_expected)?;
-                let a = vm
-                    .stack
-                    .pop()
-                    .ok_or_else(err_stack_underflow)?
-                    .as_int()
-                    .ok_or_else(err_int_expected)?;
+                let [a, b] = vm.pop2_int()?;
                 vm.stack.push(Value::Int(a / b));
             }
             Op::Int_Mod => {
-                let b = vm
-                    .stack
-                    .pop()
-                    .ok_or_else(err_stack_underflow)?
-                    .as_int()
-                    .ok_or_else(err_int_expected)?;
-                let a = vm
-                    .stack
-                    .pop()
-                    .ok_or_else(err_stack_underflow)?
-                    .as_int()
-                    .ok_or_else(err_int_expected)?;
+                let [a, b] = vm.pop2_int()?;
                 vm.stack.push(Value::Int(a % b));
             }
 
             Op::Int_Ne => {
-                let b = vm
-                    .stack
-                    .pop()
-                    .ok_or_else(err_stack_underflow)?
-                    .as_int()
-                    .ok_or_else(err_int_expected)?;
-                let a = vm
-                    .stack
-                    .pop()
-                    .ok_or_else(err_stack_underflow)?
-                    .as_int()
-                    .ok_or_else(err_int_expected)?;
-                vm.stack.push(Value::new_bool(a != b));
+                let [a, b] = vm.pop2_int()?;
+                vm.stack.push(Value::from_bool(a != b));
             }
             Op::Int_Eq => {
-                let b = vm
-                    .stack
-                    .pop()
-                    .ok_or_else(err_stack_underflow)?
-                    .as_int()
-                    .ok_or_else(err_int_expected)?;
-                let a = vm
-                    .stack
-                    .pop()
-                    .ok_or_else(err_stack_underflow)?
-                    .as_int()
-                    .ok_or_else(err_int_expected)?;
-                vm.stack.push(Value::new_bool(a == b));
+                let [a, b] = vm.pop2_int()?;
+                vm.stack.push(Value::from_bool(a == b));
             }
             Op::Int_Lt => {
-                let b = vm
-                    .stack
-                    .pop()
-                    .ok_or_else(err_stack_underflow)?
-                    .as_int()
-                    .ok_or_else(err_int_expected)?;
-                let a = vm
-                    .stack
-                    .pop()
-                    .ok_or_else(err_stack_underflow)?
-                    .as_int()
-                    .ok_or_else(err_int_expected)?;
-                vm.stack.push(Value::new_bool(a < b));
+                let [a, b] = vm.pop2_int()?;
+                vm.stack.push(Value::from_bool(a < b));
             }
             Op::Int_Le => {
-                let b = vm
-                    .stack
-                    .pop()
-                    .ok_or_else(err_stack_underflow)?
-                    .as_int()
-                    .ok_or_else(err_int_expected)?;
-                let a = vm
-                    .stack
-                    .pop()
-                    .ok_or_else(err_stack_underflow)?
-                    .as_int()
-                    .ok_or_else(err_int_expected)?;
-                vm.stack.push(Value::new_bool(a <= b));
+                let [a, b] = vm.pop2_int()?;
+                vm.stack.push(Value::from_bool(a <= b));
             }
             Op::Int_Gt => {
-                let b = vm
-                    .stack
-                    .pop()
-                    .ok_or_else(err_stack_underflow)?
-                    .as_int()
-                    .ok_or_else(err_int_expected)?;
-                let a = vm
-                    .stack
-                    .pop()
-                    .ok_or_else(err_stack_underflow)?
-                    .as_int()
-                    .ok_or_else(err_int_expected)?;
-                vm.stack.push(Value::new_bool(a > b));
+                let [a, b] = vm.pop2_int()?;
+                vm.stack.push(Value::from_bool(a > b));
             }
             Op::Int_Ge => {
-                let b = vm
-                    .stack
-                    .pop()
-                    .ok_or_else(err_stack_underflow)?
-                    .as_int()
-                    .ok_or_else(err_int_expected)?;
-                let a = vm
-                    .stack
-                    .pop()
-                    .ok_or_else(err_stack_underflow)?
-                    .as_int()
-                    .ok_or_else(err_int_expected)?;
-                vm.stack.push(Value::new_bool(a >= b));
+                let [a, b] = vm.pop2_int()?;
+                vm.stack.push(Value::from_bool(a >= b));
             }
 
-            Op::Float_Neq => todo!(),
-            Op::Float_Add => todo!(),
-            Op::Float_Sub => todo!(),
-            Op::Float_Mul => todo!(),
-            Op::Float_Div => todo!(),
-            Op::Float_Mod => todo!(),
+            Op::Float_Neg => {
+                let a = vm.stack[frame.ip]
+                    .as_float()
+                    .ok_or_else(err_float_expected)?;
+                vm.stack[frame.ip] = Value::Float(-a);
+            }
+            Op::Float_Add => {
+                let [a, b] = vm.pop2_float()?;
+                vm.stack.push(Value::Float(a + b));
+            }
+            Op::Float_Sub => {
+                let [a, b] = vm.pop2_float()?;
+                vm.stack.push(Value::Float(a - b));
+            }
+            Op::Float_Mul => {
+                let [a, b] = vm.pop2_float()?;
+                vm.stack.push(Value::Float(a * b));
+            }
+            Op::Float_Div => {
+                let [a, b] = vm.pop2_float()?;
+                vm.stack.push(Value::Float(a / b));
+            }
+            Op::Float_Mod => {
+                let [a, b] = vm.pop2_float()?;
+                vm.stack.push(Value::Float(a % b));
+            }
 
-            Op::Float_Ne => todo!(),
-            Op::Float_Eq => todo!(),
-            Op::Float_Lt => todo!(),
-            Op::Float_Le => todo!(),
-            Op::Float_Gt => todo!(),
-            Op::Float_Ge => todo!(),
+            Op::Float_Ne => {
+                let [a, b] = vm.pop2_float()?;
+                vm.stack.push(Value::from_bool(a != b));
+            }
+            Op::Float_Eq => {
+                let [a, b] = vm.pop2_float()?;
+                vm.stack.push(Value::from_bool(a == b));
+            }
+            Op::Float_Lt => {
+                let [a, b] = vm.pop2_float()?;
+                vm.stack.push(Value::from_bool(a < b));
+            }
+            Op::Float_Le => {
+                let [a, b] = vm.pop2_float()?;
+                vm.stack.push(Value::from_bool(a <= b));
+            }
+            Op::Float_Gt => {
+                let [a, b] = vm.pop2_float()?;
+                vm.stack.push(Value::from_bool(a > b));
+            }
+            Op::Float_Ge => {
+                let [a, b] = vm.pop2_float()?;
+                vm.stack.push(Value::from_bool(a >= b));
+            }
 
             Op::Str_Concat => todo!(),
             Op::Str_Slice => todo!(),
 
-            Op::JumpNe { .. } => todo!(),
-            Op::JumpEq { .. } => todo!(),
-            Op::JumpLt { .. } => todo!(),
-            Op::JumpLe { .. } => todo!(),
-            Op::JumpGt { .. } => todo!(),
-            Op::JumpGe { .. } => todo!(),
-            Op::JumpZero { addr } => {
-                let a = vm
-                    .stack
-                    .pop()
-                    .ok_or_else(err_stack_underflow)?
-                    .as_int()
-                    .ok_or_else(err_int_expected)?;
-                if a == 0 {
-                    frame.ip = (frame.ip as i64 + addr.into_i64()) as usize;
+            Op::JumpNe { addr } => {
+                if vm.pop_int()? != 0 {
+                    frame.jump(addr.into_i64())
                 }
             }
-            Op::Jump { addr } => {
-                frame.ip = (frame.ip as i64 + addr.into_i64()) as usize;
+            Op::JumpEq { addr } => {
+                if vm.pop_int()? == 0 {
+                    frame.jump(addr.into_i64())
+                }
             }
+            Op::JumpLt { addr } => {
+                if vm.pop_int()? < 0 {
+                    frame.jump(addr.into_i64())
+                }
+            }
+            Op::JumpLe { addr } => {
+                if vm.pop_int()? <= 0 {
+                    frame.jump(addr.into_i64())
+                }
+            }
+            Op::JumpGt { addr } => {
+                if vm.pop_int()? > 0 {
+                    frame.jump(addr.into_i64())
+                }
+            }
+            Op::JumpGe { addr } => {
+                if vm.pop_int()? >= 0 {
+                    frame.jump(addr.into_i64())
+                }
+            }
+            Op::JumpZero { addr } => {
+                if vm.pop_int()? == 0 {
+                    frame.jump(addr.into_i64())
+                }
+            }
+            Op::Jump { addr } => frame.jump(addr.into_i64()),
         }
     }
 }

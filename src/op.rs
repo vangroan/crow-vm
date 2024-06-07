@@ -59,7 +59,7 @@ pub enum Op {
     PushFunc(Arg24),
 
     // Integer arithmetic.
-    Int_Neq,
+    Int_Neg,
     Int_Add,
     Int_Sub,
     Int_Mul,
@@ -75,7 +75,7 @@ pub enum Op {
     Int_Ge,
 
     // Float arithmetic
-    Float_Neq,
+    Float_Neg,
     Float_Add,
     Float_Sub,
     Float_Mul,
