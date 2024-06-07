@@ -2,8 +2,7 @@ use std::fmt::{self, Formatter};
 use std::ptr::NonNull;
 use std::rc::Rc;
 
-use crate::func::Func;
-use crate::object::ObjPtr;
+use crate::object::{Func, Object};
 
 /// Value is a typed, safe value.
 #[derive(Debug, Clone)]
@@ -11,7 +10,7 @@ pub enum Value {
     Int(i64),
     UInt(u64),
     Float(f64),
-    Object(Obj),
+    Object(Object),
 }
 
 impl Value {
@@ -34,36 +33,27 @@ impl Value {
     }
 
     pub fn from_func(func: Rc<Func>) -> Self {
-        Value::Object(Obj::Func(func))
+        Value::Object(Object::Func(func))
     }
 
     pub fn as_func(&self) -> Option<&Rc<Func>> {
         match self {
-            Value::Object(Obj::Func(ref func_rc)) => Some(func_rc),
+            Value::Object(Object::Func(ref func_rc)) => Some(func_rc),
             _ => None,
         }
     }
 
-    pub fn to_func(&self) -> Option<Rc<Func>> {
+    pub fn to_func(self) -> Option<Rc<Func>> {
         match self {
-            Value::Object(Obj::Func(func_rc)) => Some(func_rc.clone()),
+            Value::Object(Object::Func(func_rc)) => Some(func_rc.clone()),
             _ => None,
         }
     }
 }
 
-#[derive(Clone)]
-pub enum Obj {
-    Func(Rc<Func>),
-}
-
-impl fmt::Debug for Obj {
-    fn fmt(&self, f: &mut Formatter) -> fmt::Result {
-        match self {
-            Self::Func(rc) => write!(f, "Func(0x{:?})", Rc::as_ptr(rc)),
-        }
-    }
-}
+/// TODO: Unsafe memory management.
+#[derive(Clone, Copy)]
+pub struct ObjPtr(NonNull<()>);
 
 /// Slot is an untyped, unsafe value.
 #[derive(Clone, Copy)]
@@ -103,9 +93,17 @@ mod test {
     use super::*;
     use crate::errors::Result;
     use crate::{
-        func::Constants,
+        object::Constants,
         op::{Arg24, Op},
     };
+
+    #[test]
+    fn test_value_size() {
+        assert!(
+            std::mem::size_of::<Value>() <= std::mem::size_of::<usize>() * 2,
+            "Value should be at most two machine words"
+        );
+    }
 
     /// Experimental Miri test
     #[test]

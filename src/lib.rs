@@ -1,11 +1,10 @@
 mod array;
 mod env;
 mod errors;
-mod func;
+mod handle;
 mod limits;
 mod object;
 mod op;
-mod slot;
 mod string;
 #[cfg(test)]
 mod tests;

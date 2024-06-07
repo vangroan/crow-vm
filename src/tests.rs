@@ -1,7 +1,7 @@
 use std::rc::Rc;
 
 use crate::errors::Result;
-use crate::func::{Constants, Func};
+use crate::object::{Constants, Func};
 use crate::op::{Arg24, Op};
 use crate::vm::Vm;
 
@@ -124,7 +124,6 @@ fn test_basic_call() -> Result<()> {
 
     Ok(())
 }
-
 
 #[test]
 fn test_recursion() -> Result<()> {

@@ -1,7 +1,7 @@
 use std::rc::Rc;
 
 use crate::errors::{runtime_err, Error, Result};
-use crate::func::Func;
+use crate::object::Func;
 use crate::op::Op;
 use crate::value::Value;
 
@@ -188,7 +188,8 @@ fn run_interpreter(vm: &mut Vm, func: Rc<Func>) -> Result<()> {
                     base: callee_base,
                     results: results as usize,
                     func: vm.stack[callee_base]
-                        .to_func()
+                        .as_func()
+                        .cloned()
                         .ok_or_else(err_func_expected)?,
                 };
 
