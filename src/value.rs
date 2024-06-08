@@ -123,6 +123,7 @@ mod test {
                 strings: Box::new([]),
                 funcs: Box::new([]),
             },
+            up_values: Box::new([]),
         });
 
         // let slot = unsafe {

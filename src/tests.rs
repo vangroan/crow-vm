@@ -1,8 +1,8 @@
 use std::rc::Rc;
 
 use crate::errors::Result;
-use crate::object::{Constants, Func};
-use crate::op::{Arg24, Op};
+use crate::object::{Constants, Func, UpValueOrigin};
+use crate::op::{shorthand as op, Arg24, Op};
 use crate::vm::Vm;
 
 #[test]
@@ -24,6 +24,7 @@ fn test_basic_math() -> Result<()> {
             strings: Box::new([]),
             funcs: Box::new([]),
         },
+        up_values: Box::new([]),
     });
 
     let env = ();
@@ -48,6 +49,7 @@ fn test_basic_branch() -> Result<()> {
             strings: Box::new([]),
             funcs: Box::new([]),
         },
+        up_values: Box::new([]),
         code: Box::new([
             // locals a, b
             Op::PushIntIn(Arg24::from_i64(7)?),
@@ -91,6 +93,7 @@ fn test_basic_call() -> Result<()> {
             strings: Box::new([]),
             funcs: Box::new([]),
         },
+        up_values: Box::new([]),
         code: vec![Op::Int_Add, Op::Return { results: 1 }, Op::End].into_boxed_slice(),
     });
 
@@ -103,6 +106,7 @@ fn test_basic_call() -> Result<()> {
             strings: Box::new([]),
             funcs: Box::new([add_func]),
         },
+        up_values: Box::new([]),
         code: Box::new([
             // locals a, b
             Op::PushIntIn(Arg24::from_i64(7)?),
@@ -127,12 +131,12 @@ fn test_basic_call() -> Result<()> {
 
 #[test]
 fn test_recursion() -> Result<()> {
-    // func fib(n: Int) -> Int {
+    // local fib = func(n: Int) -> Int {
     //    if n <= 1 {
     //       return n
     //    }
     //    return fib(n-1) + fib(n-2)
-    // }
+    // };
     // TODO: Closures and up-values
     let fib_func = Rc::new(Func {
         stack_size: 2,
@@ -143,7 +147,31 @@ fn test_recursion() -> Result<()> {
             strings: Box::new([]),
             funcs: Box::new([]),
         },
-        code: vec![Op::Return { results: 1 }, Op::End].into_boxed_slice(),
+        up_values: Box::new([
+            UpValueOrigin::Parent(1), // local fib = func...
+        ]),
+        code: vec![
+            // .local 1, n:Int
+            op::jump_le(0),
+            op::return_(1), // return local 1
+            // fib(n-2)
+            op::get_upvalue(0),
+            op::push_int_inlined(2),
+            op::get_local(1),
+            op::int_sub(),
+            op::call(2, 1),
+            // fib(n-1)
+            op::get_upvalue(0),
+            op::push_int_inlined(1),
+            op::get_local(1),
+            op::int_sub(),
+            op::call(3, 1),
+            // fib(n-1) + fib(n-2)
+            op::int_add(),
+            op::return_(1),
+            op::end(),
+        ]
+        .into_boxed_slice(),
     });
 
     let top_func = Rc::new(Func {
@@ -155,18 +183,16 @@ fn test_recursion() -> Result<()> {
             strings: Box::new([]),
             funcs: Box::new([fib_func]),
         },
+        up_values: Box::new([]),
         code: Box::new([
-            // locals a, b
-            Op::PushIntIn(Arg24::from_i64(7)?),
-            Op::PushIntIn(Arg24::from_i64(11)?),
-            Op::PushFunc(Arg24::from_u32(0)?),
-            Op::GetLocal { slot: 1 },
-            Op::GetLocal { slot: 2 },
-            Op::Call {
-                base: 3,
-                results: 1,
-            },
-            Op::End,
+            // local fib = func(n: Int) -> Int { ...
+            op::create_closure(0),
+            // fib(20)
+            op::get_local(1),
+            op::push_int_inlined(20),
+            op::call(2, 1),
+            op::return_(1),
+            op::end(),
         ]),
     });
 

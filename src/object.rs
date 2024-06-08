@@ -33,6 +33,13 @@ pub struct Func {
     pub(crate) is_varg: bool,
 
     pub(crate) constants: Constants,
+
+    /// Up-values are local variables from outer lexical scopes that have been captured
+    /// by this function's scope.
+    ///
+    /// This table describes whether an up-value is directly from the parent scope, or
+    /// from an outer scope farther out.
+    pub(crate) up_values: Box<[UpValueOrigin]>,
 }
 
 pub struct Constants {
@@ -40,6 +47,42 @@ pub struct Constants {
     pub(crate) floats: Box<[f64]>,
     pub(crate) strings: Box<[String]>,
     pub(crate) funcs: Box<[Rc<Func>]>,
+}
+
+/// Indicates how far from the local scope the up-value originated.
+///
+/// An open up-value pointing to the immediate parent scope has its
+/// value in that parent's local variables.
+///
+/// An open up-value with a value from beyond that, has to point to
+/// the parent scope's up-value list.
+///
+/// During runtime, outer scopes are not guaranteed to be on the
+/// call stack when a closure is instantiated, because multiple
+/// closures can be nested and returned.
+///
+/// In this example z is local, y is an up-value pointing to a parent's
+/// local (origin `Parent`), and x is an up-value pointing to a parent's
+/// up-value (origin `Outer`) which in turn points to the grand-parent's
+/// local.
+///
+/// ```scheme
+/// (lambda (x)      ;; outer
+///   (lambda (y)    ;; parent
+///     (lambda (z)  ;; local
+///       (+ x y z)
+///   )))
+/// ```
+///
+/// Up-values from outer scopes are copied down into inner scopes,
+/// their handles shared so "closing" will reflect in all, effectively
+/// *flattening* the closures.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum UpValueOrigin {
+    /// UpValue is located in parent's local variables.
+    Parent(u32), // local_id
+    /// UpValue is located in parent's up-value list.
+    Outer(u32), // up-value id
 }
 
 struct FuncFmt<'a>(&'a Func);

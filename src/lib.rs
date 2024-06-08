@@ -11,4 +11,5 @@ mod tests;
 mod value;
 mod vm;
 
+pub use op::{shorthand, Op};
 pub use vm::Vm;

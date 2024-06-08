@@ -268,6 +268,9 @@ fn run_op_loop(vm: &mut Vm, frame: &mut CallFrame) -> Result<FrameAction> {
                 vm.stack.push(vm.stack[slot as usize].clone());
             }
 
+            Op::SetUpValue { .. } => todo!(),
+            Op::GetUpValue { .. } => todo!(),
+
             Op::SetGlobal { .. } => todo!(),
             Op::GetGlobal { .. } => todo!(),
 
@@ -304,6 +307,8 @@ fn run_op_loop(vm: &mut Vm, frame: &mut CallFrame) -> Result<FrameAction> {
                     })?;
                 vm.stack.push(Value::from_func(func.clone()));
             }
+            Op::CreateClosure { .. } => todo!(),
+
             Op::Int_Neg => {
                 let a = vm.stack[frame.ip].as_int().ok_or_else(err_int_expected)?;
                 vm.stack[frame.ip] = Value::Int(-a);

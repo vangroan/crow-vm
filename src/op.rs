@@ -1,4 +1,4 @@
-use crate::errors::{runtime_err, Error, Result};
+use crate::errors::{runtime_err, Result};
 use crate::limits::*;
 
 /// Bytecode instruction.
@@ -43,6 +43,14 @@ pub enum Op {
         slot: u16,
     },
 
+    SetUpValue {
+        slot: u16,
+    },
+
+    GetUpValue {
+        slot: u16,
+    },
+
     SetGlobal {
         string: u16,
     },
@@ -57,6 +65,13 @@ pub enum Op {
     PushFloat(Arg24),
     PushString(Arg24),
     PushFunc(Arg24),
+
+    /// Creates a closure from the function prototype.
+    ///
+    /// `func_id` is the constant id in the current scope.
+    CreateClosure {
+        func_id: Arg24,
+    },
 
     // Integer arithmetic.
     Int_Neg,
@@ -164,9 +179,134 @@ impl Arg24 {
     }
 
     #[inline(always)]
+    pub fn from_i32(value: i32) -> Result<Self> {
+        if value >= MAX_ARG_24 as i32 {
+            Err(runtime_err("value is too large to fit in 24 bits"))
+        } else if value <= MIN_ARG24 as i32 {
+            Err(runtime_err("value is too small to fit in 24 bits"))
+        } else {
+            let [a, b, c, _] = value.to_le_bytes();
+            Ok(Self([a, b, c]))
+        }
+    }
+
+    #[inline(always)]
     pub fn from_u32(value: u32) -> Result<Self> {
         let [a, b, c, _] = value.to_le_bytes();
         Ok(Self([a, b, c]))
+    }
+}
+
+pub mod shorthand {
+    use super::*;
+
+    #[cold]
+    fn encode_panic(err: crate::errors::Error) -> ! {
+        panic!("failed to encode instruction: {err}")
+    }
+
+    pub fn noop() -> Op {
+        Op::NoOp
+    }
+
+    pub fn pop(n: u32) -> Op {
+        match Arg24::from_u32(n).map(Op::Pop) {
+            Ok(op) => op,
+            Err(err) => encode_panic(err),
+        }
+    }
+
+    pub fn end() -> Op {
+        Op::End
+    }
+
+    pub fn return_(result_count: u8) -> Op {
+        Op::Return {
+            results: result_count,
+        }
+    }
+
+    pub fn call(base: u16, result_count: u8) -> Op {
+        Op::Call {
+            base,
+            results: result_count,
+        }
+    }
+
+    // ...
+
+    pub fn set_local(slot: u16) -> Op {
+        Op::SetLocal { slot }
+    }
+
+    pub fn get_local(slot: u16) -> Op {
+        Op::GetLocal { slot }
+    }
+
+    pub fn set_upvalue(slot: u16) -> Op {
+        Op::SetUpValue { slot }
+    }
+
+    pub fn get_upvalue(slot: u16) -> Op {
+        Op::GetUpValue { slot }
+    }
+
+    pub fn set_global(string: u16) -> Op {
+        Op::SetGlobal { string }
+    }
+
+    pub fn get_global(string: u16) -> Op {
+        Op::GetGlobal { string }
+    }
+
+    pub fn push_int_inlined(int: i32) -> Op {
+        match Arg24::from_i32(int).map(Op::PushIntIn) {
+            Ok(op) => op,
+            Err(err) => encode_panic(err),
+        }
+    }
+
+    // ...
+
+    pub fn create_closure(func_id: u32) -> Op {
+        match Arg24::from_u32(func_id).map(|func_id| Op::CreateClosure { func_id }) {
+            Ok(op) => op,
+            Err(err) => encode_panic(err),
+        }
+    }
+
+    // ...
+
+    pub fn int_add() -> Op {
+        Op::Int_Add
+    }
+
+    pub fn int_sub() -> Op {
+        Op::Int_Sub
+    }
+
+    // ...
+
+    pub fn jump_le(address_offset: i32) -> Op {
+        match Arg24::from_i32(address_offset).map(|addr| Op::JumpLe { addr }) {
+            Ok(op) => op,
+            Err(err) => encode_panic(err),
+        }
+    }
+
+    /// Jump if greater than (>).
+    pub fn jump_gt(address_offset: i32) -> Op {
+        match Arg24::from_i32(address_offset).map(|addr| Op::JumpGt { addr }) {
+            Ok(op) => op,
+            Err(err) => encode_panic(err),
+        }
+    }
+
+    pub fn jump(address_offset: i32) -> Op {
+        match Arg24::from_i32(address_offset).map(|addr| Op::Jump { addr }) {
+            Ok(op) => op,
+            Err(err) => encode_panic(err),
+        }
     }
 }
 
