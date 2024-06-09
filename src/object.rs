@@ -1,4 +1,5 @@
 //! Objects (heap allocated reference types)
+use std::cell::RefCell;
 use std::fmt::{self, Formatter};
 use std::rc::Rc;
 
@@ -8,14 +9,14 @@ use crate::value::Value;
 
 #[derive(Clone)]
 pub enum Object {
-    Closure(Handle<Closure>),
+    Closure(Rc<Closure>),
     Func(Rc<Func>),
 }
 
 impl fmt::Debug for Object {
     fn fmt(&self, f: &mut Formatter) -> fmt::Result {
         match self {
-            Object::Closure(handle) => todo!(),
+            Object::Closure(rc) => write!(f, "Closure(0x{:?})", Rc::as_ptr(rc)),
             Object::Func(rc) => write!(f, "Func(0x{:?})", Rc::as_ptr(rc)),
         }
     }
@@ -77,7 +78,7 @@ pub struct Constants {
 /// Up-values from outer scopes are copied down into inner scopes,
 /// their handles shared so "closing" will reflect in all, effectively
 /// *flattening* the closures.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum UpValueOrigin {
     /// UpValue is located in parent's local variables.
     Parent(u32), // local_id
@@ -94,21 +95,41 @@ impl<'a> fmt::Debug for FuncFmt<'a> {
 }
 
 /// A callable instance of a function, optionally with captured outer variables.
+///
+/// Closures can be stored in vairables and used as values.
+///
+/// Closures keep a list of up-values to variables in outer scopes.
 pub struct Closure {
     /// Shared handle to the function definition.
     ///
     /// Procedures are considered immutable after they're compiled,
     /// so we use [`Rc`] directly without the interior mutability
     /// offered by [`Handle`].
-    pub(crate) proc: Rc<Func>,
+    pub(crate) func: Rc<Func>,
 
-    // TODO: Change to Box<[UpValue]>
-    pub(crate) up_values: Vec<Handle<UpValue>>,
+    /// List of up-values to outer scope variables.
+    pub(crate) up_values: RefCell<Box<[Handle<UpValue>]>>,
+}
+
+impl Closure {
+    pub(crate) fn new(func: Rc<Func>) -> Self {
+        Self {
+            func,
+            up_values: RefCell::new(Box::new([])),
+        }
+    }
+
+    pub(crate) fn with_up_values(func: Rc<Func>, up_values: Box<[Handle<UpValue>]>) -> Self {
+        Self {
+            func,
+            up_values: RefCell::new(up_values),
+        }
+    }
 }
 
 impl fmt::Debug for Closure {
     fn fmt(&self, f: &mut Formatter) -> fmt::Result {
-        let func_fmt = FuncFmt(&self.proc);
+        let func_fmt = FuncFmt(&self.func);
         f.debug_struct("Closure")
             .field("proc", &func_fmt)
             .field("up_values", &self.up_values)
@@ -133,4 +154,15 @@ pub enum UpValue {
     ///
     /// In this case the up-value holds a *handle* to a heap value.
     Closed(Value),
+}
+
+impl UpValue {
+    /// Close the up-value, placing the given value into its slot.
+    ///
+    /// If the up-value is already closed, the existing value will
+    /// be overwritten.
+    #[inline]
+    pub(crate) fn close(&mut self, value: Value) {
+        *self = UpValue::Closed(value);
+    }
 }

@@ -1,7 +1,8 @@
 use std::rc::Rc;
 
 use crate::errors::{runtime_err, Error, Result};
-use crate::object::Func;
+use crate::handle::Handle;
+use crate::object::{Closure, Func, Object, UpValue, UpValueOrigin};
 use crate::op::Op;
 use crate::value::Value;
 
@@ -22,8 +23,18 @@ struct CallFrame {
     base: usize,
     /// The number of resulting values the caller expects from the callee.
     results: usize,
+    /// The closure being executed by this frame.
+    closure: Rc<Closure>,
     /// Function prototype that this frame is executing.
     func: Rc<Func>,
+    /// These are the *open* up-values belonging to all closures created in this
+    /// call frame that captured local variables belonging to this call frame.
+    /// They are shared with each closures' heap space so that closing them
+    /// reflects within those closures' when it escapes.
+    ///
+    /// Before this frame is popped off the call stack, all its captured locals must
+    /// be copied into the up-values, and the up-values closed.
+    up_values: Vec<Handle<UpValue>>,
 }
 
 #[derive(Debug)]
@@ -47,8 +58,11 @@ impl Vm {
         }
     }
 
-    pub fn run(&mut self, _env: (), func: Rc<Func>) -> Result<()> {
-        run_interpreter(self, func)
+    /// Execute a function constant.
+    pub fn run_function(&mut self, _env: (), func: Rc<Func>) -> Result<()> {
+        // All callables are wrapped in closures to simplify the VM loop.
+        let closure = Rc::new(Closure::new(func));
+        run_interpreter(self, closure)
     }
 
     fn grow_stack(&mut self, additional: usize) {
@@ -97,37 +111,37 @@ impl Vm {
 }
 
 impl CallFrame {
-    fn new(func: Rc<Func>) -> Self {
+    fn new(closure: Rc<Closure>) -> Self {
         Self {
             ip: 0,
             top: 0,
             base: 0,
             results: 0,
-            func,
+            func: closure.func.clone(),
+            closure,
+            up_values: Vec::new(),
         }
     }
 }
 
 impl CallFrame {
     fn jump(&mut self, offset: i64) {
+        println!("      jump {:04} -> {:04}", self.ip, self.ip as i64 + offset);
         self.ip = (self.ip as i64 + offset) as usize;
     }
 }
 
 /// Interpreter entry point.
-fn run_interpreter(vm: &mut Vm, func: Rc<Func>) -> Result<()> {
-    // FIXME: Memory management to ensure this Rc<Func> isn't leaked.
-    let mut frame = CallFrame::new(func.clone());
+fn run_interpreter(vm: &mut Vm, closure: Rc<Closure>) -> Result<()> {
+    // FIXME: Memory management to ensure this Rc<Closure> isn't leaked.
+    let mut frame = CallFrame::new(closure.clone());
 
-    vm.stack.push(Value::from_func(frame.func.clone()));
+    vm.stack.push(Value::from_closure(frame.closure.clone()));
 
     loop {
         match run_op_loop(vm, &mut frame)? {
             FrameAction::Return { start, count } => {
-                println!(
-                    "return: frame.base->{}, slot->{:?}",
-                    frame.base, vm.stack[frame.base]
-                );
+                println!("return: frame.base->{}, slot->{:?}", frame.base, vm.stack[frame.base]);
 
                 // Drop callable to decrement reference count.
                 // let _ = vm.stack[frame.base].as_func();
@@ -175,22 +189,28 @@ fn run_interpreter(vm: &mut Vm, func: Rc<Func>) -> Result<()> {
 
                 frame = vm.calls.pop().unwrap();
             }
-            FrameAction::Call { base, results } => {
+            FrameAction::Call {
+                base: callee_base,
+                results,
+            } => {
                 // base is relative to the caller's base.
-                let callee_base = frame.base + base as usize;
                 let slot = vm.stack[callee_base].clone();
 
                 println!("call: frame.base->{}, callee_base->{:?}", frame.base, slot);
+
+                let closure = vm.stack[callee_base]
+                    .as_closure()
+                    .cloned()
+                    .ok_or_else(err_closure_expected)?;
 
                 let new_frame = CallFrame {
                     ip: 0,
                     top: 1,
                     base: callee_base,
                     results: results as usize,
-                    func: vm.stack[callee_base]
-                        .as_func()
-                        .cloned()
-                        .ok_or_else(err_func_expected)?,
+                    func: closure.func.clone(),
+                    closure,
+                    up_values: Vec::new(),
                 };
 
                 vm.calls.push(std::mem::replace(&mut frame, new_frame));
@@ -199,12 +219,24 @@ fn run_interpreter(vm: &mut Vm, func: Rc<Func>) -> Result<()> {
     }
 }
 
+fn err_const_notfound() -> Error {
+    runtime_err("constant not found")
+}
+
+fn err_upvalue_notfound() -> Error {
+    runtime_err("up-value not found")
+}
+
 fn err_stack_underflow() -> Error {
     runtime_err("stack underflow")
 }
 
 fn err_func_expected() -> Error {
     runtime_err("function value expected")
+}
+
+fn err_closure_expected() -> Error {
+    runtime_err("closure value expected")
 }
 
 fn err_int_expected() -> Error {
@@ -230,7 +262,8 @@ fn run_op_loop(vm: &mut Vm, frame: &mut CallFrame) -> Result<FrameAction> {
             .ok_or_else(|| runtime_err("instruction pointer out of bytecode bounds"))?;
         frame.ip += 1;
 
-        println!("vm.stack -> {:?}", vm.stack);
+        println!("      {:?}", vm.stack);
+        println!("{:04} : {:?}", frame.ip, op);
 
         match op {
             Op::NoOp => { /* Do nothing */ }
@@ -241,6 +274,18 @@ fn run_op_loop(vm: &mut Vm, frame: &mut CallFrame) -> Result<FrameAction> {
             }
             Op::End => return Ok(FrameAction::Return { start: 0, count: 0 }),
             Op::Return { results: count } => {
+                // Close up-values.
+                //
+                // This frame is about the go out of scope, so any captured
+                // local variables must be preserved on the heap.
+                for up_value_handle in frame.up_values.drain(..) {
+                    let up_value = &mut *up_value_handle.borrow_mut();
+                    if let UpValue::Open(stack_offset) = up_value {
+                        let value = vm.stack[*stack_offset].clone();
+                        up_value.close(value);
+                    }
+                }
+
                 // Top values on stack are considered the return values.
                 let start = vm.stack.len() - frame.base - count as usize;
                 return Ok(FrameAction::Return { start, count });
@@ -261,15 +306,48 @@ fn run_op_loop(vm: &mut Vm, frame: &mut CallFrame) -> Result<FrameAction> {
             }
 
             Op::SetLocal { slot } => {
-                vm.stack[slot as usize] =
-                    vm.stack.last().cloned().ok_or_else(err_stack_underflow)?;
+                vm.stack[frame.base + slot as usize] = vm.stack.last().cloned().ok_or_else(err_stack_underflow)?;
             }
             Op::GetLocal { slot } => {
-                vm.stack.push(vm.stack[slot as usize].clone());
+                vm.stack.push(vm.stack[frame.base + slot as usize].clone());
             }
 
-            Op::SetUpValue { .. } => todo!(),
-            Op::GetUpValue { .. } => todo!(),
+            Op::SetUpValue { upvalue_id } => {
+                let value = vm.stack.pop().ok_or_else(err_stack_underflow)?;
+
+                match &mut *frame
+                    .closure
+                    .up_values
+                    .borrow_mut()
+                    .get(upvalue_id as usize)
+                    .ok_or_else(err_upvalue_notfound)?
+                    .borrow_mut()
+                {
+                    UpValue::Open(stack_offset) => {
+                        vm.stack[*stack_offset] = value;
+                    }
+                    UpValue::Closed(upvalue) => {
+                        *upvalue = value;
+                    }
+                }
+            }
+            Op::GetUpValue { upvalue_id } => {
+                match &*frame
+                    .closure
+                    .up_values
+                    .borrow()
+                    .get(upvalue_id as usize)
+                    .ok_or_else(err_upvalue_notfound)?
+                    .borrow()
+                {
+                    UpValue::Open(stack_offset) => {
+                        vm.stack.push(vm.stack[*stack_offset].clone());
+                    }
+                    UpValue::Closed(upvalue) => {
+                        vm.stack.push(upvalue.clone());
+                    }
+                }
+            }
 
             Op::SetGlobal { .. } => todo!(),
             Op::GetGlobal { .. } => todo!(),
@@ -278,36 +356,61 @@ fn run_op_loop(vm: &mut Vm, frame: &mut CallFrame) -> Result<FrameAction> {
                 vm.stack.push(Value::Int(value.into_i64()));
             }
             Op::PushInt(const_id) => {
-                let x = *frame
-                    .func
-                    .constants
-                    .ints
-                    .get(const_id.into_usize())
-                    .ok_or_else(|| {
-                        runtime_err(format!(
-                            "no integer constant defined: {}",
-                            const_id.into_usize()
-                        ))
+                let x =
+                    *frame.func.constants.ints.get(const_id.into_usize()).ok_or_else(|| {
+                        runtime_err(format!("no integer constant defined: {}", const_id.into_usize()))
                     })?;
                 vm.stack.push(Value::Int(x));
             }
             Op::PushFloat(_const_id) => todo!(),
             Op::PushString(_const_id) => todo!(),
             Op::PushFunc(const_id) => {
+                let func =
+                    frame.func.constants.funcs.get(const_id.into_usize()).ok_or_else(|| {
+                        runtime_err(format!("no function found at constant {}", const_id.into_usize()))
+                    })?;
+                vm.stack.push(Value::from_func(func.clone()));
+            }
+            Op::CaptureValue(_) => todo!(),
+            Op::CreateClosure { func_id } => {
                 let func = frame
                     .func
                     .constants
                     .funcs
-                    .get(const_id.into_usize())
-                    .ok_or_else(|| {
-                        runtime_err(format!(
-                            "no function found at constant {}",
-                            const_id.into_usize()
-                        ))
-                    })?;
-                vm.stack.push(Value::from_func(func.clone()));
+                    .get(func_id.into_usize())
+                    .cloned()
+                    .ok_or_else(err_const_notfound)?;
+                let mut upvalues = Vec::new();
+                let parent_upvalues = frame.closure.up_values.borrow();
+
+                for upvalue_origin in func.up_values.iter() {
+                    match *upvalue_origin {
+                        // Create a new up-value pointing to a local variable
+                        // in the current scope.
+                        //
+                        // Be mindful of terminology here.
+                        // The current running closure is the *parent* of the child closure
+                        // that is being spawned right now.
+                        UpValueOrigin::Parent(local_id) => {
+                            let stack_offset = frame.base + local_id as usize;
+                            let up_value = Handle::new(UpValue::Open(stack_offset));
+                            upvalues.push(up_value.clone());
+
+                            // Keep a handle to the up-value in the current frame,
+                            // so it can be closed when the local goes out of scope.
+                            frame.up_values.push(up_value);
+                        }
+                        // Share a handle to an existing up-value.
+                        UpValueOrigin::Outer(upvalue_id) => {
+                            upvalues.push(parent_upvalues[upvalue_id as usize].clone());
+                        }
+                    }
+                }
+
+                let closure = Closure::with_up_values(func, upvalues.into_boxed_slice());
+                let closure_rc = Rc::new(closure);
+                vm.stack.push(Value::Object(Object::Closure(closure_rc)));
             }
-            Op::CreateClosure { .. } => todo!(),
 
             Op::Int_Neg => {
                 let a = vm.stack[frame.ip].as_int().ok_or_else(err_int_expected)?;
@@ -360,9 +463,7 @@ fn run_op_loop(vm: &mut Vm, frame: &mut CallFrame) -> Result<FrameAction> {
             }
 
             Op::Float_Neg => {
-                let a = vm.stack[frame.ip]
-                    .as_float()
-                    .ok_or_else(err_float_expected)?;
+                let a = vm.stack[frame.ip].as_float().ok_or_else(err_float_expected)?;
                 vm.stack[frame.ip] = Value::Float(-a);
             }
             Op::Float_Add => {
@@ -435,7 +536,8 @@ fn run_op_loop(vm: &mut Vm, frame: &mut CallFrame) -> Result<FrameAction> {
                 }
             }
             Op::JumpGt { addr } => {
-                if vm.pop_int()? > 0 {
+                let [a, b] = vm.pop2_int()?;
+                if a > b {
                     frame.jump(addr.into_i64())
                 }
             }

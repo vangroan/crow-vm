@@ -2,7 +2,7 @@ use std::fmt::{self, Formatter};
 use std::ptr::NonNull;
 use std::rc::Rc;
 
-use crate::object::{Func, Object};
+use crate::object::{Closure, Func, Object};
 
 /// Value is a typed, safe value.
 #[derive(Debug, Clone)]
@@ -46,6 +46,17 @@ impl Value {
     pub fn to_func(self) -> Option<Rc<Func>> {
         match self {
             Value::Object(Object::Func(func_rc)) => Some(func_rc.clone()),
+            _ => None,
+        }
+    }
+
+    pub fn from_closure(closure: Rc<Closure>) -> Self {
+        Value::Object(Object::Closure(closure))
+    }
+
+    pub fn as_closure(&self) -> Option<&Rc<Closure>> {
+        match self {
+            Value::Object(Object::Closure(ref rc)) => Some(rc),
             _ => None,
         }
     }

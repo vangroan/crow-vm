@@ -31,7 +31,7 @@ fn test_basic_math() -> Result<()> {
 
     let mut vm = Vm::new();
 
-    vm.run(env, func)?;
+    vm.run_function(env, func)?;
 
     println!("stack: {:?}", vm.stack);
 
@@ -75,7 +75,7 @@ fn test_basic_branch() -> Result<()> {
 
     let mut vm = Vm::new();
 
-    vm.run(env, func)?;
+    vm.run_function(env, func)?;
 
     println!("stack: {:?}", vm.stack);
 
@@ -114,16 +114,13 @@ fn test_basic_call() -> Result<()> {
             Op::PushFunc(Arg24::from_u32(0)?),
             Op::GetLocal { slot: 1 },
             Op::GetLocal { slot: 2 },
-            Op::Call {
-                base: 3,
-                results: 1,
-            },
+            Op::Call { base: 3, results: 1 },
             Op::End,
         ]),
     });
 
     let mut vm = Vm::new();
-    vm.run((), top_func)?;
+    vm.run_function((), top_func)?;
     println!("stack: {:?}", vm.stack);
 
     Ok(())
@@ -131,6 +128,7 @@ fn test_basic_call() -> Result<()> {
 
 #[test]
 fn test_recursion() -> Result<()> {
+    const INPUT: i32 = 5;
     // local fib = func(n: Int) -> Int {
     //    if n <= 1 {
     //       return n
@@ -139,7 +137,7 @@ fn test_recursion() -> Result<()> {
     // };
     // TODO: Closures and up-values
     let fib_func = Rc::new(Func {
-        stack_size: 2,
+        stack_size: 7,
         is_varg: false,
         constants: Constants {
             ints: Box::new([]),
@@ -152,18 +150,21 @@ fn test_recursion() -> Result<()> {
         ]),
         code: vec![
             // .local 1, n:Int
-            op::jump_le(0),
+            // if n >= 1 then
+            op::get_local(1),
+            op::push_int_inlined(1),
+            op::jump_gt(1),
             op::return_(1), // return local 1
             // fib(n-2)
             op::get_upvalue(0),
-            op::push_int_inlined(2),
             op::get_local(1),
+            op::push_int_inlined(2),
             op::int_sub(),
             op::call(2, 1),
             // fib(n-1)
             op::get_upvalue(0),
-            op::push_int_inlined(1),
             op::get_local(1),
+            op::push_int_inlined(1),
             op::int_sub(),
             op::call(3, 1),
             // fib(n-1) + fib(n-2)
@@ -189,12 +190,15 @@ fn test_recursion() -> Result<()> {
             op::create_closure(0),
             // fib(20)
             op::get_local(1),
-            op::push_int_inlined(20),
+            op::push_int_inlined(INPUT),
             op::call(2, 1),
             op::return_(1),
             op::end(),
         ]),
     });
+
+    let mut vm = Vm::new();
+    vm.run_function((), top_func)?;
 
     Ok(())
 }

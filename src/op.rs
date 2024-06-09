@@ -1,5 +1,6 @@
 use crate::errors::{runtime_err, Result};
 use crate::limits::*;
+use crate::object::UpValueOrigin;
 
 /// Bytecode instruction.
 #[derive(Debug, Clone, Copy)]
@@ -44,11 +45,10 @@ pub enum Op {
     },
 
     SetUpValue {
-        slot: u16,
+        upvalue_id: u16,
     },
-
     GetUpValue {
-        slot: u16,
+        upvalue_id: u16,
     },
 
     SetGlobal {
@@ -66,9 +66,16 @@ pub enum Op {
     PushString(Arg24),
     PushFunc(Arg24),
 
-    /// Creates a closure from the function prototype.
+    /// Capture a variable as an up-value for the coming closure creation. See [`Op::CreateClosure`]
+    CaptureValue(UpValueOrigin),
+
+    /// Instantiate a new closure object.
     ///
-    /// `func_id` is the constant id in the current scope.
+    /// The `func_id` argument is the location of the function prototype
+    /// that this closure instantiates.
+    ///
+    /// This instruction is preceded by zero or more  [`Op::CaptureValue`] operations
+    /// that setup the stack with up-values.
     CreateClosure {
         func_id: Arg24,
     },
@@ -221,9 +228,7 @@ pub mod shorthand {
     }
 
     pub fn return_(result_count: u8) -> Op {
-        Op::Return {
-            results: result_count,
-        }
+        Op::Return { results: result_count }
     }
 
     pub fn call(base: u16, result_count: u8) -> Op {
@@ -243,12 +248,12 @@ pub mod shorthand {
         Op::GetLocal { slot }
     }
 
-    pub fn set_upvalue(slot: u16) -> Op {
-        Op::SetUpValue { slot }
+    pub fn set_upvalue(upvalue_id: u16) -> Op {
+        Op::SetUpValue { upvalue_id }
     }
 
-    pub fn get_upvalue(slot: u16) -> Op {
-        Op::GetUpValue { slot }
+    pub fn get_upvalue(upvalue_id: u16) -> Op {
+        Op::GetUpValue { upvalue_id }
     }
 
     pub fn set_global(string: u16) -> Op {
@@ -316,10 +321,7 @@ mod test {
 
     #[test]
     fn test_op_size() {
-        assert!(
-            std::mem::size_of::<Op>() <= 4,
-            "instruction must by at most 32-bits"
-        );
+        assert!(std::mem::size_of::<Op>() <= 4, "instruction must by at most 32-bits");
     }
 
     #[test]
