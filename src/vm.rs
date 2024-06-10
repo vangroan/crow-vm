@@ -1,3 +1,4 @@
+use std::fmt::{self, Formatter};
 use std::rc::Rc;
 
 use crate::errors::{runtime_err, Error, Result};
@@ -126,9 +127,20 @@ impl CallFrame {
 
 impl CallFrame {
     fn jump(&mut self, offset: i64) {
-        println!("      jump {:04} -> {:04}", self.ip, self.ip as i64 + offset);
+        println!(
+            "      jump {:04} -> {:04}",
+            self.ip,
+            self.ip as i64 + offset
+        );
         self.ip = (self.ip as i64 + offset) as usize;
     }
+}
+
+/// Utility for dumping the [`Vm`] state to a formatter.
+struct DumpVm<'a> {
+    vm: &'a Vm,
+    frame: &'a CallFrame,
+    flags: u32,
 }
 
 /// Interpreter entry point.
@@ -141,7 +153,10 @@ fn run_interpreter(vm: &mut Vm, closure: Rc<Closure>) -> Result<()> {
     loop {
         match run_op_loop(vm, &mut frame)? {
             FrameAction::Return { start, count } => {
-                println!("return: frame.base->{}, slot->{:?}", frame.base, vm.stack[frame.base]);
+                println!(
+                    "return: frame.base->{}, slot->{:?}, start->{}, count->{}",
+                    frame.base, vm.stack[frame.base], start, count
+                );
 
                 // Drop callable to decrement reference count.
                 // let _ = vm.stack[frame.base].as_func();
@@ -171,11 +186,12 @@ fn run_interpreter(vm: &mut Vm, closure: Rc<Closure>) -> Result<()> {
                 let result_count = frame.results.min(count as usize);
 
                 // Slice the stack to the callee's span so it's easier to work with.
-                let stack = &mut vm.stack[frame.base..frame.base + frame.func.stack_size as usize];
+                let stack = &mut vm.stack[frame.base..];
 
                 // This overflow can happen if the bytecode is malformed.
                 // (Result instruction returned wrong count)
                 if start + result_count > stack.len() {
+                    println!("stack.len() -> {}", stack.len());
                     return runtime_err("returned results overflow stack").into();
                 }
 
@@ -262,7 +278,7 @@ fn run_op_loop(vm: &mut Vm, frame: &mut CallFrame) -> Result<FrameAction> {
             .ok_or_else(|| runtime_err("instruction pointer out of bytecode bounds"))?;
         frame.ip += 1;
 
-        println!("      {:?}", vm.stack);
+        dump_vm(vm, frame);
         println!("{:04} : {:?}", frame.ip, op);
 
         match op {
@@ -287,7 +303,7 @@ fn run_op_loop(vm: &mut Vm, frame: &mut CallFrame) -> Result<FrameAction> {
                 }
 
                 // Top values on stack are considered the return values.
-                let start = vm.stack.len() - frame.base - count as usize;
+                let start = vm.stack.len() - count as usize;
                 return Ok(FrameAction::Return { start, count });
             }
 
@@ -306,7 +322,8 @@ fn run_op_loop(vm: &mut Vm, frame: &mut CallFrame) -> Result<FrameAction> {
             }
 
             Op::SetLocal { slot } => {
-                vm.stack[frame.base + slot as usize] = vm.stack.last().cloned().ok_or_else(err_stack_underflow)?;
+                vm.stack[frame.base + slot as usize] =
+                    vm.stack.last().cloned().ok_or_else(err_stack_underflow)?;
             }
             Op::GetLocal { slot } => {
                 vm.stack.push(vm.stack[frame.base + slot as usize].clone());
@@ -356,18 +373,32 @@ fn run_op_loop(vm: &mut Vm, frame: &mut CallFrame) -> Result<FrameAction> {
                 vm.stack.push(Value::Int(value.into_i64()));
             }
             Op::PushInt(const_id) => {
-                let x =
-                    *frame.func.constants.ints.get(const_id.into_usize()).ok_or_else(|| {
-                        runtime_err(format!("no integer constant defined: {}", const_id.into_usize()))
+                let x = *frame
+                    .func
+                    .constants
+                    .ints
+                    .get(const_id.into_usize())
+                    .ok_or_else(|| {
+                        runtime_err(format!(
+                            "no integer constant defined: {}",
+                            const_id.into_usize()
+                        ))
                     })?;
                 vm.stack.push(Value::Int(x));
             }
             Op::PushFloat(_const_id) => todo!(),
             Op::PushString(_const_id) => todo!(),
             Op::PushFunc(const_id) => {
-                let func =
-                    frame.func.constants.funcs.get(const_id.into_usize()).ok_or_else(|| {
-                        runtime_err(format!("no function found at constant {}", const_id.into_usize()))
+                let func = frame
+                    .func
+                    .constants
+                    .funcs
+                    .get(const_id.into_usize())
+                    .ok_or_else(|| {
+                        runtime_err(format!(
+                            "no function found at constant {}",
+                            const_id.into_usize()
+                        ))
                     })?;
                 vm.stack.push(Value::from_func(func.clone()));
             }
@@ -463,7 +494,9 @@ fn run_op_loop(vm: &mut Vm, frame: &mut CallFrame) -> Result<FrameAction> {
             }
 
             Op::Float_Neg => {
-                let a = vm.stack[frame.ip].as_float().ok_or_else(err_float_expected)?;
+                let a = vm.stack[frame.ip]
+                    .as_float()
+                    .ok_or_else(err_float_expected)?;
                 vm.stack[frame.ip] = Value::Float(-a);
             }
             Op::Float_Add => {
@@ -553,5 +586,50 @@ fn run_op_loop(vm: &mut Vm, frame: &mut CallFrame) -> Result<FrameAction> {
             }
             Op::Jump { addr } => frame.jump(addr.into_i64()),
         }
+    }
+}
+
+fn dump_vm(vm: &Vm, frame: &CallFrame) {
+    println!(
+        "{}",
+        DumpVm {
+            vm,
+            frame,
+            flags: DumpVm::FLAG_DUMP_STACK,
+        }
+    );
+}
+
+impl<'a> DumpVm<'a> {
+    /// Dump the operand sttack.
+    const FLAG_DUMP_STACK: u32 = 0x00000001;
+}
+
+impl<'a> fmt::Display for DumpVm<'a> {
+    fn fmt(&self, f: &mut Formatter) -> fmt::Result {
+        if self.flags & Self::FLAG_DUMP_STACK != 0 {
+            let Vm { stack, calls } = self.vm;
+            // For convenience combine the call stack with the currently active frame.
+            let mut iter = calls.iter().chain(std::iter::once(self.frame)).enumerate();
+            let mut maybe_frame = iter.next();
+            for (index, slot) in stack.iter().enumerate() {
+                write!(f, "|")?;
+
+                if let Some((frame_id, frame)) = maybe_frame {
+                    if index >= frame.base {
+                        write!(f, "[{}] : ", frame_id)?;
+                        maybe_frame = iter.next();
+                    } else {
+                        write!(f, "      ")?;
+                    }
+                } else {
+                    write!(f, "      ")?;
+                }
+
+                writeln!(f, "{index:04} | {:?}", slot)?;
+            }
+        }
+
+        Ok(())
     }
 }

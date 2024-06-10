@@ -228,7 +228,9 @@ pub mod shorthand {
     }
 
     pub fn return_(result_count: u8) -> Op {
-        Op::Return { results: result_count }
+        Op::Return {
+            results: result_count,
+        }
     }
 
     pub fn call(base: u16, result_count: u8) -> Op {
@@ -321,7 +323,10 @@ mod test {
 
     #[test]
     fn test_op_size() {
-        assert!(std::mem::size_of::<Op>() <= 4, "instruction must by at most 32-bits");
+        assert!(
+            std::mem::size_of::<Op>() <= 4,
+            "instruction must by at most 32-bits"
+        );
     }
 
     #[test]
