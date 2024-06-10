@@ -325,8 +325,7 @@ fn run_op_loop(vm: &mut Vm, frame: &mut CallFrame) -> Result<FrameAction> {
             }
 
             Op::SetLocal { slot } => {
-                vm.stack[frame.base + slot as usize] =
-                    vm.stack.last().cloned().ok_or_else(err_stack_underflow)?;
+                vm.stack[frame.base + slot as usize] = vm.stack.last().cloned().ok_or_else(err_stack_underflow)?;
             }
             Op::GetLocal { slot } => {
                 vm.stack.push(vm.stack[frame.base + slot as usize].clone());
@@ -376,32 +375,18 @@ fn run_op_loop(vm: &mut Vm, frame: &mut CallFrame) -> Result<FrameAction> {
                 vm.stack.push(Value::Int(value.into_i64()));
             }
             Op::PushInt(const_id) => {
-                let x = *frame
-                    .func
-                    .constants
-                    .ints
-                    .get(const_id.into_usize())
-                    .ok_or_else(|| {
-                        runtime_err(format!(
-                            "no integer constant defined: {}",
-                            const_id.into_usize()
-                        ))
+                let x =
+                    *frame.func.constants.ints.get(const_id.into_usize()).ok_or_else(|| {
+                        runtime_err(format!("no integer constant defined: {}", const_id.into_usize()))
                     })?;
                 vm.stack.push(Value::Int(x));
             }
             Op::PushFloat(_const_id) => todo!(),
             Op::PushString(_const_id) => todo!(),
             Op::PushFunc(const_id) => {
-                let func = frame
-                    .func
-                    .constants
-                    .funcs
-                    .get(const_id.into_usize())
-                    .ok_or_else(|| {
-                        runtime_err(format!(
-                            "no function found at constant {}",
-                            const_id.into_usize()
-                        ))
+                let func =
+                    frame.func.constants.funcs.get(const_id.into_usize()).ok_or_else(|| {
+                        runtime_err(format!("no function found at constant {}", const_id.into_usize()))
                     })?;
                 vm.stack.push(Value::from_func(func.clone()));
             }
@@ -497,9 +482,7 @@ fn run_op_loop(vm: &mut Vm, frame: &mut CallFrame) -> Result<FrameAction> {
             }
 
             Op::Float_Neg => {
-                let a = vm.stack[frame.ip]
-                    .as_float()
-                    .ok_or_else(err_float_expected)?;
+                let a = vm.stack[frame.ip].as_float().ok_or_else(err_float_expected)?;
                 vm.stack[frame.ip] = Value::Float(-a);
             }
             Op::Float_Add => {

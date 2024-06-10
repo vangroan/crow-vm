@@ -114,10 +114,7 @@ fn test_basic_call() -> Result<()> {
             Op::PushFunc(Arg24::from_u32(0)?),
             Op::GetLocal { slot: 1 },
             Op::GetLocal { slot: 2 },
-            Op::Call {
-                base: 3,
-                results: 1,
-            },
+            Op::Call { base: 3, results: 1 },
             Op::End,
         ]),
     });
