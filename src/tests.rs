@@ -85,7 +85,7 @@ fn test_basic_branch() -> Result<()> {
 #[test]
 fn test_basic_call() -> Result<()> {
     let add_func = Rc::new(Func {
-        stack_size: 2,
+        stack_size: 3,
         is_varg: false,
         constants: Constants {
             ints: Box::new([]),
@@ -108,13 +108,16 @@ fn test_basic_call() -> Result<()> {
         },
         up_values: Box::new([]),
         code: Box::new([
-            // locals a, b
+            // local add = func()...
+            Op::CreateClosure {
+                func_id: Arg24::from_u32(0)?,
+            },
+            // add(7, 11)
+            Op::GetLocal { slot: 1 },
             Op::PushIntIn(Arg24::from_i64(7)?),
             Op::PushIntIn(Arg24::from_i64(11)?),
-            Op::PushFunc(Arg24::from_u32(0)?),
-            Op::GetLocal { slot: 1 },
-            Op::GetLocal { slot: 2 },
-            Op::Call { base: 3, results: 1 },
+            Op::Call { base: 2, results: 1 },
+            Op::Return { results: 1 },
             Op::End,
         ]),
     });

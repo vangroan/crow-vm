@@ -390,7 +390,6 @@ fn run_op_loop(vm: &mut Vm, frame: &mut CallFrame) -> Result<FrameAction> {
                     })?;
                 vm.stack.push(Value::from_func(func.clone()));
             }
-            Op::CaptureValue(_) => todo!(),
             Op::CreateClosure { func_id } => {
                 let func = frame
                     .func

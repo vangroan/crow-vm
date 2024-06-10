@@ -67,7 +67,7 @@ pub enum Op {
     PushFunc(Arg24),
 
     /// Capture a variable as an up-value for the coming closure creation. See [`Op::CreateClosure`]
-    CaptureValue(UpValueOrigin),
+    // CaptureValue(UpValueOrigin),
 
     /// Instantiate a new closure object.
     ///
