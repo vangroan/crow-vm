@@ -131,7 +131,7 @@ fn test_basic_call() -> Result<()> {
 
 #[test]
 fn test_recursion() -> Result<()> {
-    const INPUT: i32 = 5;
+    const INPUT: i32 = 20;
     // local fib = func(n: Int) -> Int {
     //    if n <= 1 {
     //       return n

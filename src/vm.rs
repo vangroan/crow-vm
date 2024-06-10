@@ -127,11 +127,11 @@ impl CallFrame {
 
 impl CallFrame {
     fn jump(&mut self, offset: i64) {
-        println!(
-            "      jump {:04} -> {:04}",
-            self.ip,
-            self.ip as i64 + offset
-        );
+        // println!(
+        //     "      jump {:04} -> {:04}",
+        //     self.ip,
+        //     self.ip as i64 + offset
+        // );
         self.ip = (self.ip as i64 + offset) as usize;
     }
 }
@@ -153,10 +153,10 @@ fn run_interpreter(vm: &mut Vm, closure: Rc<Closure>) -> Result<()> {
     loop {
         match run_op_loop(vm, &mut frame)? {
             FrameAction::Return { start, count } => {
-                println!(
-                    "return: frame.base->{}, slot->{:?}, start->{}, count->{}",
-                    frame.base, vm.stack[frame.base], start, count
-                );
+                // println!(
+                //     "return: frame.base->{}, slot->{:?}, start->{}, count->{}",
+                //     frame.base, vm.stack[frame.base], start, count
+                // );
 
                 // Drop callable to decrement reference count.
                 // let _ = vm.stack[frame.base].as_func();
@@ -188,10 +188,13 @@ fn run_interpreter(vm: &mut Vm, closure: Rc<Closure>) -> Result<()> {
                 // Slice the stack to the callee's span so it's easier to work with.
                 let stack = &mut vm.stack[frame.base..];
 
+                // Translate absolute to relative stack index.
+                let start = start - frame.base;
+
                 // This overflow can happen if the bytecode is malformed.
                 // (Result instruction returned wrong count)
                 if start + result_count > stack.len() {
-                    println!("stack.len() -> {}", stack.len());
+                    // println!("stack.len() -> {}", stack.len());
                     return runtime_err("returned results overflow stack").into();
                 }
 
@@ -201,7 +204,7 @@ fn run_interpreter(vm: &mut Vm, closure: Rc<Closure>) -> Result<()> {
                 }
 
                 vm.stack.truncate(frame.base + result_count);
-                println!("vm.stack (after truncate) -> {:?}", vm.stack);
+                // println!("vm.stack (after truncate) -> {:?}", vm.stack);
 
                 frame = vm.calls.pop().unwrap();
             }
@@ -212,7 +215,7 @@ fn run_interpreter(vm: &mut Vm, closure: Rc<Closure>) -> Result<()> {
                 // base is relative to the caller's base.
                 let slot = vm.stack[callee_base].clone();
 
-                println!("call: frame.base->{}, callee_base->{:?}", frame.base, slot);
+                // println!("call: frame.base->{}, callee_base->{:?}", frame.base, slot);
 
                 let closure = vm.stack[callee_base]
                     .as_closure()
@@ -278,8 +281,8 @@ fn run_op_loop(vm: &mut Vm, frame: &mut CallFrame) -> Result<FrameAction> {
             .ok_or_else(|| runtime_err("instruction pointer out of bytecode bounds"))?;
         frame.ip += 1;
 
-        dump_vm(vm, frame);
-        println!("{:04} : {:?}", frame.ip, op);
+        // dump_vm(vm, frame);
+        // println!("{:04} : {:?}", frame.ip, op);
 
         match op {
             Op::NoOp => { /* Do nothing */ }
@@ -589,6 +592,7 @@ fn run_op_loop(vm: &mut Vm, frame: &mut CallFrame) -> Result<FrameAction> {
     }
 }
 
+#[allow(dead_code)]
 fn dump_vm(vm: &Vm, frame: &CallFrame) {
     println!(
         "{}",
