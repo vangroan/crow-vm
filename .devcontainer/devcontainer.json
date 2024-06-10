@@ -1,5 +1,9 @@
 {
-  "image": "ghcr.io/devcontainers/features/rust:1",
+  "name": "general-purpose-rust",
+  "image": "mcr.microsoft.com/devcontainers/base:ubuntu",
   "features": {
+    "ghcr.io/devcontainers/features/rust:1": {
+      "version": "latest"
+    }
   }
 }
