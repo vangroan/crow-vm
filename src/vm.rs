@@ -534,22 +534,26 @@ fn run_op_loop(vm: &mut Vm, frame: &mut CallFrame) -> Result<FrameAction> {
             Op::Str_Slice => todo!(),
 
             Op::JumpNe { addr } => {
-                if vm.pop_int()? != 0 {
+                let [a, b] = vm.pop2_int()?;
+                if a != b {
                     frame.jump(addr.into_i64())
                 }
             }
             Op::JumpEq { addr } => {
-                if vm.pop_int()? == 0 {
+                let [a, b] = vm.pop2_int()?;
+                if a == b {
                     frame.jump(addr.into_i64())
                 }
             }
             Op::JumpLt { addr } => {
-                if vm.pop_int()? < 0 {
+                let [a, b] = vm.pop2_int()?;
+                if a < b {
                     frame.jump(addr.into_i64())
                 }
             }
             Op::JumpLe { addr } => {
-                if vm.pop_int()? <= 0 {
+                let [a, b] = vm.pop2_int()?;
+                if a <= b {
                     frame.jump(addr.into_i64())
                 }
             }
@@ -560,7 +564,8 @@ fn run_op_loop(vm: &mut Vm, frame: &mut CallFrame) -> Result<FrameAction> {
                 }
             }
             Op::JumpGe { addr } => {
-                if vm.pop_int()? >= 0 {
+                let [a, b] = vm.pop2_int()?;
+                if a >= b {
                     frame.jump(addr.into_i64())
                 }
             }
