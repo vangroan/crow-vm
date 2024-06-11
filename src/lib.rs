@@ -1,4 +1,5 @@
 mod array;
+mod ast;
 mod env;
 mod errors;
 mod handle;
@@ -8,6 +9,7 @@ mod op;
 mod string;
 #[cfg(test)]
 mod tests;
+mod types;
 mod value;
 mod vm;
 
