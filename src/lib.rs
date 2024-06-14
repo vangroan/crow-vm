@@ -9,6 +9,7 @@ mod op;
 mod string;
 #[cfg(test)]
 mod tests;
+mod typechecker;
 mod types;
 mod value;
 mod vm;

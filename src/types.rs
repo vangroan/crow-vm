@@ -1,8 +1,21 @@
 //! Type system.
+use std::{
+    collections::HashMap,
+    fmt::{self, Formatter},
+};
 
 /// Initialiase the table of types, with the built in types in their proper positions.
 pub fn init_type_table() -> Vec<Type> {
     vec![Type::Void, Type::Int, Type::Float, Type::String]
+}
+
+pub fn init_type_aliases() -> HashMap<String, TypeId> {
+    let mut aliases = HashMap::new();
+    aliases.insert("Void".to_string(), TYPE_VOID_ID);
+    aliases.insert("Int".to_string(), TYPE_INT_ID);
+    aliases.insert("Float".to_string(), TYPE_FLOAT_ID);
+    aliases.insert("String".to_string(), TYPE_STRING_ID);
+    aliases
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -42,6 +55,26 @@ pub enum Type {
         args: Vec<TypeId>,
         retunr_: TypeId,
     },
+    Struct {
+        fields: Vec<()>,
+    },
+}
+
+impl fmt::Display for Type {
+    fn fmt(&self, f: &mut Formatter) -> fmt::Result {
+        let name = match self {
+            Type::Void => "Void",
+            Type::Int => "Int",
+            Type::Float => "Float",
+            Type::String => "String",
+            Type::Tuple(_) => "Tuple",
+            Type::Array(_) => "Array",
+            Type::Table(_, _) => "Table",
+            Type::Func { .. } => "Func",
+            Type::Struct { .. } => "Struct",
+        };
+        write!(f, "{}", name)
+    }
 }
 
 #[cfg(test)]

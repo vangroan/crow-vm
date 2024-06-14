@@ -9,15 +9,29 @@ pub(crate) fn runtime_err(message: impl ToString) -> self::Error {
     }
 }
 
+pub(crate) fn typecheck_err(message: impl ToString) -> self::Error {
+    Error {
+        message: message.to_string(),
+        kind: ErrorKind::Type,
+    }
+}
+
 #[derive(Debug)]
 pub struct Error {
     pub message: String,
     pub kind: ErrorKind,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ErrorKind {
     Runtime,
+    Type,
+}
+
+impl Error {
+    pub fn is_typecheck_err(&self) -> bool {
+        matches!(self.kind, ErrorKind::Type)
+    }
 }
 
 impl fmt::Display for Error {
