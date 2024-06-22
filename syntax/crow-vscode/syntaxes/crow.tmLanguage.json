@@ -1,0 +1,49 @@
+{
+	"$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
+	"name": "Crow",
+	"patterns": [
+		{
+			"include": "#keywords"
+		},
+		{
+			"include": "#number"
+		},
+		{
+			"include": "#strings"
+		},
+		{
+			"match": "\\b([a-zA-Z_][a-zA-Z0-9_]*)\\b(?=\\s*:)",
+			"name": "entity.name.type.crow"
+		},
+		{
+			"match": "\\b([a-zA-Z_][a-zA-Z0-9_]*)\\b(?=\\s*=)",
+			"name": "variable.local.crow"
+		}
+	],
+	"repository": {
+		"keywords": {
+			"patterns": [
+				{
+					"name": "keyword.control.crow",
+					"match": "\\b(if|while|for|return|type|let|fn)\\b"
+				}
+			]
+		},
+		"number": {
+			"name": "constant.numeric.crow",
+			"match": "\\d+"
+		},
+		"strings": {
+			"name": "string.quoted.double.crow",
+			"begin": "\"",
+			"end": "\"",
+			"patterns": [
+				{
+					"name": "constant.character.escape.crow",
+					"match": "\\\\."
+				}
+			]
+		}
+	},
+	"scopeName": "source.crow"
+}

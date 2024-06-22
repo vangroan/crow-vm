@@ -1,0 +1,25 @@
+{
+  "name": "crow",
+  "displayName": "crow",
+  "description": "Syntax highlighting for the Crow language",
+  "version": "0.0.1",
+  "engines": {
+    "vscode": "^1.90.0"
+  },
+  "categories": [
+    "Programming Languages"
+  ],
+  "contributes": {
+    "languages": [{
+      "id": "crow",
+      "aliases": ["Crow", "crow"],
+      "extensions": [".crow"],
+      "configuration": "./language-configuration.json"
+    }],
+    "grammars": [{
+      "language": "crow",
+      "scopeName": "source.crow",
+      "path": "./syntaxes/crow.tmLanguage.json"
+    }]
+  }
+}
