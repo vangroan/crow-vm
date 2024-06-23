@@ -116,6 +116,18 @@ pub enum Op {
     Str_Concat,
     Str_Slice,
 
+    // Hash Table
+    /// Create new table intance on the top of the stack.
+    Table_Create,
+    /// Insert a value at the given key into the table.
+    Table_Insert,
+    /// Copy the value at the given key from the table and push it onto the stack.
+    Table_Get,
+    /// Checks whether the given key exists in the table.
+    Table_Contains,
+    /// Delete the value at the given key from the table.
+    Table_Remove,
+
     // Jumps
     JumpNe {
         addr: Arg24,
@@ -154,7 +166,7 @@ pub struct Arg24([u8; 3]);
 
 impl Arg24 {
     #[inline(always)]
-    pub fn into_i64(self) -> i64 {
+    pub fn as_i64(self) -> i64 {
         let [a, b, c] = self.0;
         // Place the bytes into the most signifigant to shift
         // down and preseve the sign.
@@ -162,13 +174,13 @@ impl Arg24 {
     }
 
     #[inline(always)]
-    pub fn into_u32(self) -> u32 {
+    pub fn as_u32(self) -> u32 {
         let [a, b, c] = self.0;
         u32::from_le_bytes([a, b, c, 0])
     }
 
     #[inline(always)]
-    pub fn into_usize(self) -> usize {
+    pub fn as_usize(self) -> usize {
         let [a, b, c] = self.0;
         u32::from_le_bytes([a, b, c, 0]) as usize
     }
@@ -271,6 +283,13 @@ pub mod shorthand {
         }
     }
 
+    pub fn push_string(string_id: u32) -> Op {
+        match Arg24::from_u32(string_id).map(Op::PushString) {
+            Ok(op) => op,
+            Err(err) => encode_panic(err),
+        }
+    }
+
     // ...
 
     pub fn create_closure(func_id: u32) -> Op {
@@ -288,6 +307,26 @@ pub mod shorthand {
 
     pub fn int_sub() -> Op {
         Op::Int_Sub
+    }
+
+    pub fn table_create() -> Op {
+        Op::Table_Create
+    }
+
+    pub fn table_insert() -> Op {
+        Op::Table_Insert
+    }
+
+    pub fn table_get() -> Op {
+        Op::Table_Get
+    }
+
+    pub fn table_contains() -> Op {
+        Op::Table_Contains
+    }
+
+    pub fn table_remove() -> Op {
+        Op::Table_Remove
     }
 
     // ...
@@ -327,6 +366,6 @@ mod test {
     #[test]
     fn test_arg24() {
         assert_eq!(Arg24::from_i64(1).unwrap().0, [1, 0, 0]);
-        assert_eq!(Arg24::from_i64(1).unwrap().into_i64(), 1);
+        assert_eq!(Arg24::from_i64(1).unwrap().as_i64(), 1);
     }
 }

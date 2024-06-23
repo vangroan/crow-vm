@@ -1,8 +1,16 @@
 [package]
-name = "crow-vm"
+name = "crow"
 version = "0.1.0"
 edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
+# [[bench]]
+# name = "bench_vm"
+# harness = false
+
+# [dev-dependencies]
+# criterion = "0.5"
+
 [dependencies]
+fxhash = "0.2"

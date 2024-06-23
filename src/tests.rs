@@ -1,7 +1,7 @@
 use std::rc::Rc;
 
 use crate::errors::Result;
-use crate::object::{Constants, Func, UpValueOrigin};
+use crate::object::{Constants, CrowStr, Func, UpValueOrigin};
 use crate::op::{shorthand as op, Arg24, Op};
 use crate::vm::Vm;
 
@@ -195,6 +195,58 @@ fn test_recursion() -> Result<()> {
             op::get_local(1),
             op::push_int_inlined(INPUT),
             op::call(2, 1),
+            op::return_(1),
+            op::end(),
+        ]),
+    });
+
+    let mut vm = Vm::new();
+    vm.run_function((), top_func)?;
+
+    Ok(())
+}
+
+#[test]
+fn test_table() -> Result<()> {
+    let top_func = Rc::new(Func {
+        stack_size: 6,
+        is_varg: false,
+        constants: Constants {
+            ints: Box::new([]),
+            floats: Box::new([]),
+            strings: Box::new([Rc::new(CrowStr::new("a"))]),
+            funcs: Box::new([]),
+        },
+        up_values: Box::new([]),
+        code: Box::new([
+            // let x = 42;
+            op::push_int_inlined(42),
+            // let t = {};
+            op::table_create(),
+            // t["a"] = x;
+            op::get_local(2),
+            op::push_string(0),
+            op::get_local(1),
+            op::table_insert(),
+            // t["a"]
+            op::get_local(2),
+            op::push_string(0),
+            op::table_get(),
+            op::pop(1),
+            // "a" in t -> true
+            op::get_local(2),
+            op::push_string(0),
+            op::table_contains(),
+            op::pop(1),
+            // t.remove("a")
+            op::get_local(2),
+            op::push_string(0),
+            op::table_remove(),
+            // "a" in t -> false
+            op::get_local(2),
+            op::push_string(0),
+            op::table_contains(),
+            // op::pop(1),
             op::return_(1),
             op::end(),
         ]),

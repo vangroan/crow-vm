@@ -3,6 +3,8 @@ use std::cell::RefCell;
 use std::fmt::{self, Formatter};
 use std::rc::Rc;
 
+use fxhash::FxHashMap;
+
 use crate::handle::Handle;
 use crate::op::Op;
 use crate::value::Value;
@@ -11,6 +13,8 @@ use crate::value::Value;
 pub enum Object {
     Closure(Rc<Closure>),
     Func(Rc<Func>),
+    Table(Handle<Table>),
+    String(Rc<CrowStr>),
 }
 
 impl fmt::Debug for Object {
@@ -18,6 +22,8 @@ impl fmt::Debug for Object {
         match self {
             Object::Closure(rc) => write!(f, "Closure(0x{:?})", Rc::as_ptr(rc)),
             Object::Func(rc) => write!(f, "Func(0x{:?})", Rc::as_ptr(rc)),
+            Object::Table(table) => write!(f, "Table({:?})", table.borrow().data),
+            Object::String(string) => write!(f, "{:?}", string.as_str()),
         }
     }
 }
@@ -46,7 +52,7 @@ pub struct Func {
 pub struct Constants {
     pub(crate) ints: Box<[i64]>,
     pub(crate) floats: Box<[f64]>,
-    pub(crate) strings: Box<[String]>,
+    pub(crate) strings: Box<[Rc<CrowStr>]>,
     pub(crate) funcs: Box<[Rc<Func>]>,
 }
 
@@ -164,5 +170,55 @@ impl UpValue {
     #[inline]
     pub(crate) fn close(&mut self, value: Value) {
         *self = UpValue::Closed(value);
+    }
+}
+
+pub struct CrowStr {
+    data: String,
+}
+
+impl CrowStr {
+    #[inline(always)]
+    pub fn new(s: impl ToString) -> Self {
+        Self { data: s.to_string() }
+    }
+
+    pub fn as_str(&self) -> &str {
+        self.data.as_str()
+    }
+
+    pub fn into_string(self) -> String {
+        self.data
+    }
+}
+
+impl ToString for CrowStr {
+    fn to_string(&self) -> String {
+        self.data.to_string()
+    }
+}
+
+/// Hash table.
+pub struct Table {
+    data: FxHashMap<String, Value>,
+}
+
+impl Table {
+    pub fn new() -> Self {
+        Self {
+            data: FxHashMap::default(),
+        }
+    }
+
+    pub fn insert(&mut self, key: String, value: Value) -> Option<Value> {
+        self.data.insert(key, value)
+    }
+
+    pub fn get(&self, key: &str) -> Option<&Value> {
+        self.data.get(key)
+    }
+
+    pub fn remove(&mut self, key: &str) {
+        self.data.remove(key);
     }
 }

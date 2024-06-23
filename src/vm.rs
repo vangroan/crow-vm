@@ -3,7 +3,7 @@ use std::rc::Rc;
 
 use crate::errors::{runtime_err, Error, Result};
 use crate::handle::Handle;
-use crate::object::{Closure, Func, Object, UpValue, UpValueOrigin};
+use crate::object::*;
 use crate::op::Op;
 use crate::value::Value;
 
@@ -266,6 +266,14 @@ fn err_float_expected() -> Error {
     runtime_err("float value expected")
 }
 
+fn err_string_expected() -> Error {
+    runtime_err("string value expected")
+}
+
+fn err_table_expected() -> Error {
+    runtime_err("table value expected")
+}
+
 fn run_op_loop(vm: &mut Vm, frame: &mut CallFrame) -> Result<FrameAction> {
     // let Vm { stack: whole_stack, .. } = vm;
 
@@ -281,13 +289,13 @@ fn run_op_loop(vm: &mut Vm, frame: &mut CallFrame) -> Result<FrameAction> {
             .ok_or_else(|| runtime_err("instruction pointer out of bytecode bounds"))?;
         frame.ip += 1;
 
-        // dump_vm(vm, frame);
-        // println!("{:04} : {:?}", frame.ip, op);
+        dump_vm(vm, frame);
+        println!("{:04} : {:?}", frame.ip, op);
 
         match op {
             Op::NoOp => { /* Do nothing */ }
             Op::Pop(n) => {
-                for _ in 0..n.into_u32() {
+                for _ in 0..n.as_u32() {
                     vm.stack.pop();
                 }
             }
@@ -372,22 +380,35 @@ fn run_op_loop(vm: &mut Vm, frame: &mut CallFrame) -> Result<FrameAction> {
             Op::GetGlobal { .. } => todo!(),
 
             Op::PushIntIn(value) => {
-                vm.stack.push(Value::Int(value.into_i64()));
+                vm.stack.push(Value::Int(value.as_i64()));
             }
             Op::PushInt(const_id) => {
-                let x =
-                    *frame.func.constants.ints.get(const_id.into_usize()).ok_or_else(|| {
-                        runtime_err(format!("no integer constant defined: {}", const_id.into_usize()))
-                    })?;
+                let x = *frame
+                    .func
+                    .constants
+                    .ints
+                    .get(const_id.as_usize())
+                    .ok_or_else(|| runtime_err(format!("no integer constant defined: {}", const_id.as_usize())))?;
                 vm.stack.push(Value::Int(x));
             }
             Op::PushFloat(_const_id) => todo!(),
-            Op::PushString(_const_id) => todo!(),
+            Op::PushString(string_id) => {
+                let string = frame
+                    .func
+                    .constants
+                    .strings
+                    .get(string_id.as_usize())
+                    .ok_or_else(err_const_notfound)?
+                    .clone();
+                vm.stack.push(Value::Object(Object::String(string)));
+            }
             Op::PushFunc(const_id) => {
-                let func =
-                    frame.func.constants.funcs.get(const_id.into_usize()).ok_or_else(|| {
-                        runtime_err(format!("no function found at constant {}", const_id.into_usize()))
-                    })?;
+                let func = frame
+                    .func
+                    .constants
+                    .funcs
+                    .get(const_id.as_usize())
+                    .ok_or_else(|| runtime_err(format!("no function found at constant {}", const_id.as_usize())))?;
                 vm.stack.push(Value::from_func(func.clone()));
             }
             Op::CreateClosure { func_id } => {
@@ -395,7 +416,7 @@ fn run_op_loop(vm: &mut Vm, frame: &mut CallFrame) -> Result<FrameAction> {
                     .func
                     .constants
                     .funcs
-                    .get(func_id.into_usize())
+                    .get(func_id.as_usize())
                     .cloned()
                     .ok_or_else(err_const_notfound)?;
                 let mut upvalues = Vec::new();
@@ -533,48 +554,97 @@ fn run_op_loop(vm: &mut Vm, frame: &mut CallFrame) -> Result<FrameAction> {
             Op::Str_Concat => todo!(),
             Op::Str_Slice => todo!(),
 
+            Op::Table_Create => {
+                let table = Table::new();
+                let table_handle = Handle::new(table);
+                vm.stack.push(Value::Object(Object::Table(table_handle)));
+            }
+            Op::Table_Insert => {
+                let value = vm.stack.pop().ok_or_else(err_stack_underflow)?;
+                let key = vm
+                    .stack
+                    .pop()
+                    .ok_or_else(err_stack_underflow)?
+                    .as_string()
+                    .ok_or_else(err_string_expected)?
+                    .clone();
+                let table_handle = vm.stack.pop().ok_or_else(err_stack_underflow)?;
+                let table = table_handle.as_table().ok_or_else(err_table_expected)?;
+                table.borrow_mut().insert(key.to_string(), value);
+            }
+            Op::Table_Get => {
+                let key_value = vm.stack.pop().ok_or_else(err_stack_underflow)?;
+                let key = key_value.as_string().ok_or_else(err_string_expected)?;
+                let table_value = vm.stack.pop().ok_or_else(err_stack_underflow)?;
+                let table = table_value.as_table().ok_or_else(err_table_expected)?;
+                let value = table
+                    .borrow()
+                    .get(key.as_str())
+                    .ok_or_else(|| runtime_err(format!("key not found: {:?}", key.as_str())))?
+                    .clone();
+                vm.stack.push(value);
+            }
+            Op::Table_Contains => {
+                let key_value = vm.stack.pop().ok_or_else(err_stack_underflow)?;
+                let key = key_value.as_string().ok_or_else(err_string_expected)?;
+                let table_value = vm.stack.pop().ok_or_else(err_stack_underflow)?;
+                let table = table_value.as_table().ok_or_else(err_table_expected)?;
+                vm.stack.push(Value::Int(if table.borrow().get(key.as_str()).is_some() {
+                    1
+                } else {
+                    0
+                }))
+            }
+            Op::Table_Remove => {
+                let key_value = vm.stack.pop().ok_or_else(err_stack_underflow)?;
+                let key = key_value.as_string().ok_or_else(err_string_expected)?;
+                let table_value = vm.stack.pop().ok_or_else(err_stack_underflow)?;
+                let table = table_value.as_table().ok_or_else(err_table_expected)?;
+                table.borrow_mut().remove(key.as_str());
+            }
+
             Op::JumpNe { addr } => {
                 let [a, b] = vm.pop2_int()?;
                 if a != b {
-                    frame.jump(addr.into_i64())
+                    frame.jump(addr.as_i64())
                 }
             }
             Op::JumpEq { addr } => {
                 let [a, b] = vm.pop2_int()?;
                 if a == b {
-                    frame.jump(addr.into_i64())
+                    frame.jump(addr.as_i64())
                 }
             }
             Op::JumpLt { addr } => {
                 let [a, b] = vm.pop2_int()?;
                 if a < b {
-                    frame.jump(addr.into_i64())
+                    frame.jump(addr.as_i64())
                 }
             }
             Op::JumpLe { addr } => {
                 let [a, b] = vm.pop2_int()?;
                 if a <= b {
-                    frame.jump(addr.into_i64())
+                    frame.jump(addr.as_i64())
                 }
             }
             Op::JumpGt { addr } => {
                 let [a, b] = vm.pop2_int()?;
                 if a > b {
-                    frame.jump(addr.into_i64())
+                    frame.jump(addr.as_i64())
                 }
             }
             Op::JumpGe { addr } => {
                 let [a, b] = vm.pop2_int()?;
                 if a >= b {
-                    frame.jump(addr.into_i64())
+                    frame.jump(addr.as_i64())
                 }
             }
             Op::JumpZero { addr } => {
                 if vm.pop_int()? == 0 {
-                    frame.jump(addr.into_i64())
+                    frame.jump(addr.as_i64())
                 }
             }
-            Op::Jump { addr } => frame.jump(addr.into_i64()),
+            Op::Jump { addr } => frame.jump(addr.as_i64()),
         }
     }
 }

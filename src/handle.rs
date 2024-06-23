@@ -41,6 +41,10 @@ impl<T> Handle<T> {
         Rc::ptr_eq(&self.0, &other.0)
     }
 
+    pub fn as_ptr(&self) -> *const T {
+        self.0.as_ptr()
+    }
+
     pub fn downgrade(&self) -> Weak<T> {
         Weak(Rc::downgrade(&self.0))
     }

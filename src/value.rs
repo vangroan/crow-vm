@@ -2,7 +2,8 @@ use std::fmt::{self, Formatter};
 use std::ptr::NonNull;
 use std::rc::Rc;
 
-use crate::object::{Closure, Func, Object};
+use crate::handle::Handle;
+use crate::object::*;
 
 /// Value is a typed, safe value.
 #[derive(Debug, Clone)]
@@ -46,6 +47,20 @@ impl Value {
     pub fn to_func(self) -> Option<Rc<Func>> {
         match self {
             Value::Object(Object::Func(func_rc)) => Some(func_rc.clone()),
+            _ => None,
+        }
+    }
+
+    pub fn as_table(&self) -> Option<&Handle<Table>> {
+        match self {
+            Value::Object(Object::Table(ref table_handle)) => Some(table_handle),
+            _ => None,
+        }
+    }
+
+    pub fn as_string(&self) -> Option<&Rc<CrowStr>> {
+        match self {
+            Value::Object(Object::String(ref table_handle)) => Some(table_handle),
             _ => None,
         }
     }
