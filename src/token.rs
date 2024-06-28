@@ -84,6 +84,7 @@ pub enum TokenKind {
     Dot,     // .
     Eq,      // =
     Hash,    // #
+    Colon,   // :
     Semi,    // ;
 
     Plus,    // +
@@ -120,6 +121,7 @@ pub enum Keyword {
     Let,
     If,
     Import,
+    Struct,
     Type,
     While,
 }

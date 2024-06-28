@@ -14,4 +14,8 @@ These are the end-to-end tests for the language features.
         They are distinct from <i>built-ins</i> which are implemented inline
         in the interpreter loop itself.
     </dd>
+    <dt>local</dt>
+    <dd>
+        Tests for local variables.
+    </dd>
 </dl>

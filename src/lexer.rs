@@ -36,6 +36,9 @@ impl<'a> Lexer<'a> {
         }
     }
 
+    /// Creates a new [`Lexer`] from the given source code
+    /// with no debug file name.
+    #[allow(dead_code)]
     pub(crate) fn from_source(text: &'a str) -> Self {
         Self {
             text,
@@ -65,6 +68,7 @@ impl<'a> Lexer<'a> {
                     '.' => self.make_token(Dot),
                     '=' => self.make_token(Eq),
                     '#' => self.make_token(Hash),
+                    ':' => self.make_token(Colon),
                     ';' => self.make_token(Semi),
 
                     '+' => self.make_token(Plus),
@@ -238,6 +242,7 @@ impl<'a> Lexer<'a> {
             "let"    => Some(Let),
             "if"     => Some(If),
             "import" => Some(Import),
+            "struct" => Some(Struct),
             "type"   => Some(Type),
             "while"  => Some(While),
             _ => None,

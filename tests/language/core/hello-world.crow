@@ -1,2 +1,2 @@
 
-print("Hello, world!");
+System.Print("Hello, world!");

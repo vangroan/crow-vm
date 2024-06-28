@@ -9,6 +9,13 @@ pub(crate) fn lexer_err(message: impl ToString) -> self::Error {
     }
 }
 
+pub(crate) fn parser_err(message: impl ToString) -> self::Error {
+    Error {
+        message: message.to_string(),
+        kind: ErrorKind::Parser,
+    }
+}
+
 pub(crate) fn runtime_err(message: impl ToString) -> self::Error {
     Error {
         message: message.to_string(),
@@ -32,6 +39,7 @@ pub struct Error {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ErrorKind {
     Lexer,
+    Parser,
     Runtime,
     Type,
 }
