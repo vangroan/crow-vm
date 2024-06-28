@@ -2,6 +2,13 @@ use std::fmt::{self, Formatter};
 
 pub type Result<T> = std::result::Result<T, self::Error>;
 
+pub(crate) fn lexer_err(message: impl ToString) -> self::Error {
+    Error {
+        message: message.to_string(),
+        kind: ErrorKind::Lexer,
+    }
+}
+
 pub(crate) fn runtime_err(message: impl ToString) -> self::Error {
     Error {
         message: message.to_string(),
@@ -24,6 +31,7 @@ pub struct Error {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ErrorKind {
+    Lexer,
     Runtime,
     Type,
 }
