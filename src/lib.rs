@@ -3,6 +3,7 @@ mod ast;
 mod env;
 mod errors;
 mod handle;
+mod lexer;
 mod limits;
 mod object;
 mod op;

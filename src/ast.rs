@@ -35,7 +35,7 @@ pub enum Stmt {
 #[derive(Debug)]
 pub struct LocalDecl {
     pub name: Ident,
-    pub ty: Option<TypeExpr>,
+    pub ty: Option<TypeDef>,
     pub rhs: Option<Expr>,
 }
 
@@ -133,18 +133,75 @@ pub enum Number {
     Float(f64),
 }
 
+// ============================================================================ //
+// Types                                                                        //
+// ============================================================================ //
+
+/// Type declaration statement.
+///
+/// ```text
+/// type <name> = <type-def>;
+/// ```
 #[derive(Debug)]
-pub struct TypeAlias {
+pub struct TypeDeclStmt {
     pub name: Ident,
+    pub rhs: TypeDef,
 }
 
-/// Type declaration.
+/// Type definition.
+///
+/// ```text
+/// <alias|literal>
+/// ```
 #[derive(Debug)]
-pub enum TypeExpr {
-    Alias(Box<TypeAlias>),
-    Array(TypeId),
-    Table(TypeId, TypeId),
-    Struct,
+pub enum TypeDef {
+    Alias(TypeName),
+    Lit(TypeLit),
+}
+
+/// A simple type name (an alias) to another existing type.
+#[derive(Debug)]
+pub struct TypeName {
+    pub text: Ident,
+}
+
+/// Type literal.
+#[derive(Debug)]
+pub enum TypeLit {
+    /// Array type literal.
+    ///
+    /// ```text
+    /// [<type-def>; <number-lit>]
+    /// ```
+    Array { element: Box<TypeDef>, size: usize },
+
+    /// Dynamic array type literal.
+    ///
+    /// ```text
+    /// "[" <type-def> "]""
+    /// ```
+    DynArray { element: Box<TypeDef> },
+
+    /// Hash table type literal.
+    ///
+    /// ```text
+    /// "{" <type-def> ":" <type-def> "}"
+    /// ```
+    Table { key: Box<TypeDef>, value: Box<TypeDef> },
+
+    /// Structure type literal.
+    ///
+    /// ```text
+    /// "struct" "{" <field-def> ("," <field-def>)* "}"
+    /// ```
+    Struct { fields: Vec<FieldDef> },
+}
+
+/// Struct type field definition.
+#[derive(Debug)]
+pub struct FieldDef {
+    pub name: Ident,
+    pub ty: Box<TypeDef>,
 }
 
 // ============================================================================ //

@@ -31,23 +31,31 @@ impl TypeChecker {
         }
     }
 
-    /// Resolve the given type.
+    /// Resolve a type from a type definition syntax node.
     ///
-    /// A type expression can contain anonymous declarations.
-    fn resolve_type(&mut self, ty_expr: &TypeExpr) -> Result<TypeId> {
-        match ty_expr {
-            // Simple case is to lookup the type alias by string.
-            TypeExpr::Alias(alias) => self
+    /// If the type definition is a literal, an existing definition
+    /// will be looked up in the type table.
+    ///
+    /// If an existing definition isn't found, and new type is
+    /// defined with a new [`TypeId`].
+    fn resolve_type(&mut self, type_def: &TypeDef) -> Result<TypeId> {
+        use crate::ast::TypeLit::*;
+
+        match type_def {
+            // The simple case is to lookup the type alias by string.
+            TypeDef::Alias(name) => self
                 .aliases
-                .get(alias.name.text.as_str())
+                .get(name.text.text.as_str())
                 .cloned()
-                .ok_or_else(|| typecheck_err(format!("unknown type alias: {}", alias.name.text))),
-            TypeExpr::Array(_) => todo!(),
-            TypeExpr::Table(_, _) => todo!(),
-            TypeExpr::Struct => todo!(),
+                .ok_or_else(|| typecheck_err(format!("unknown type alias: {}", name.text.text))),
+            TypeDef::Lit(Array { .. }) => todo!(),
+            TypeDef::Lit(DynArray { .. }) => todo!(),
+            TypeDef::Lit(Table { .. }) => todo!(),
+            TypeDef::Lit(Struct { .. }) => todo!(),
         }
     }
 
+    /// Type check the given block.
     pub fn check_block(&mut self, block: &Block) -> Result<TypeId> {
         // TODO: Collect all the return types to determin the block's return type.
         for stmt in &block.stmts {
@@ -59,6 +67,7 @@ impl TypeChecker {
         Ok(TYPE_VOID_ID)
     }
 
+    /// Type check all the given statements.
     pub fn check_stmt(&mut self, stmt: &Stmt) -> Result<TypeId> {
         match stmt {
             Stmt::Local(local_decl) => self.check_local_decl(local_decl),
@@ -79,7 +88,7 @@ impl TypeChecker {
     fn check_local_decl(&mut self, local_decl: &LocalDecl) -> Result<TypeId> {
         // Type is explicitly user defined.
         let maybe_ty = match &local_decl.ty {
-            Some(type_expr) => Some(self.resolve_type(type_expr)?),
+            Some(type_lit) => Some(self.resolve_type(type_lit)?),
             None => None,
         };
 
@@ -179,9 +188,9 @@ mod test {
                 // Both type and initial value
                 Stmt::Local(Box::new(LocalDecl {
                     name: Ident::from_string("x"),
-                    ty: Some(TypeExpr::Alias(Box::new(TypeAlias {
-                        name: Ident::from_string("Int"),
-                    }))),
+                    ty: Some(TypeDef::Alias(TypeName {
+                        text: Ident::from_string("Int"),
+                    })),
                     rhs: Some(Expr::Lit(Box::new(Literal::Num(Number::Int(42))))),
                 })),
             ],
