@@ -1,14 +1,52 @@
 //! Lexical tokens.
+use std::fmt::{self, Formatter};
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone)]
 pub struct Token {
     pub kind: TokenKind,
     pub span: Span,
+    pub lit: Option<LitValue>,
 }
 
 impl Token {
     pub const fn new(kind: TokenKind, span: Span) -> Self {
-        Self { kind, span }
+        Self { kind, span, lit: None }
+    }
+
+    pub const fn new_lit(kind: TokenKind, span: Span, lit: LitValue) -> Self {
+        Self {
+            kind,
+            span,
+            lit: Some(lit),
+        }
+    }
+}
+
+impl PartialEq for Token {
+    fn eq(&self, other: &Self) -> bool {
+        // Invariant: Literal value omitted because float equality
+        //            is problematic and the span should be enough
+        //            to identify a token.
+        self.kind == other.kind && self.span == other.span
+    }
+}
+
+impl Eq for Token {}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum LitValue {
+    Int(i64),
+    Float(f64),
+    Str(String),
+}
+
+impl fmt::Display for LitValue {
+    fn fmt(&self, f: &mut Formatter) -> fmt::Result {
+        match self {
+            LitValue::Int(value) => fmt::Display::fmt(value, f),
+            LitValue::Float(value) => fmt::Display::fmt(value, f),
+            LitValue::Str(value) => fmt::Display::fmt(value, f),
+        }
     }
 }
 

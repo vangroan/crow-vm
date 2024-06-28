@@ -26,7 +26,7 @@ pub fn compile(source: &str, filename: &str) -> self::errors::Result<()> {
     let mut lexer = self::lexer::Lexer::new(source, filename);
     loop {
         let token = lexer.next_token()?;
-        println!("{token:?}");
+        // println!("{token:?}");
         if matches!(token.kind, token::TokenKind::Eof) {
             break;
         }

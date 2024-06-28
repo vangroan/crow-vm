@@ -1,6 +1,14 @@
 //! Lexical analyser.
 use crate::errors::{lexer_err, Result};
-use crate::token::{Keyword, Span, Token, TokenKind};
+use crate::token::{Keyword, LitValue, Span, Token, TokenKind};
+
+macro_rules! trace {
+    ($($arg:tt)*) => {
+        if cfg!(feature = "trace_lexer") {
+            println!($($arg)*);
+        }
+    };
+}
 
 /// Lexical analyser.
 pub struct Lexer<'a> {
@@ -78,6 +86,15 @@ impl<'a> Lexer<'a> {
                         }
                     }
 
+                    '(' => self.make_token(ParenLeft),
+                    ')' => self.make_token(ParenRight),
+                    '{' => self.make_token(BraceLeft),
+                    '}' => self.make_token(BraceRight),
+                    '[' => self.make_token(BracketLeft),
+                    ']' => self.make_token(BracketRight),
+
+                    '"' => self.lex_string_literal(),
+
                     _ => return lexer_err(format!("unexpected character {ch:?}")).into(),
                 },
                 // End-of-file
@@ -138,23 +155,30 @@ impl<'a> Lexer<'a> {
     /// Setup the lexer to create a new token.
     fn start_token(&mut self) {
         self.span = Span(self.pos() as u32, 0);
-        // trace!("start token at {}:", self.span.0);
+        trace!("start token at {}:", self.span.0);
     }
 
     /// Finishes the current token.
     ///
     /// See [`Lexer::start_token()`].
     fn make_token(&mut self, kind: TokenKind) -> Token {
-        // trace!(
-        //     "    token {}:{} {kind:?} {:?}",
-        //     self.span.0,
-        //     self.span.0 + self.span.1,
-        //     self.fragment(),
-        // );
-        Token {
-            kind,
-            span: self.span.clone(),
-        }
+        trace!(
+            "    {}:{} {kind:?} {:?}",
+            self.span.0,
+            self.span.0 + self.span.1,
+            self.fragment(),
+        );
+        Token::new(kind, self.span.clone())
+    }
+
+    fn make_literal(&mut self, kind: TokenKind, literal_value: LitValue) -> Token {
+        trace!(
+            "    {}:{} {kind:?} {}",
+            self.span.0,
+            self.span.0 + self.span.1,
+            self.fragment(),
+        );
+        Token::new_lit(kind, self.span.clone(), literal_value)
     }
 }
 
@@ -255,11 +279,27 @@ impl<'a> Lexer<'a> {
 
         self.make_token(kind)
     }
+
+    fn lex_string_literal(&mut self) -> Token {
+        let mut value = String::new();
+
+        while let Some(ch) = self.peek() {
+            self.bump();
+            if ch == '"' {
+                break;
+            } else {
+                value.push(ch);
+            }
+        }
+
+        self.make_literal(TokenKind::Str, LitValue::Str(value))
+    }
 }
 
 #[cfg(test)]
 mod test {
     use super::*;
+    use crate::errors::Result;
     use crate::token::TokenKind::*;
 
     /// Shorthand convenience function for creating a token.
@@ -295,11 +335,14 @@ mod test {
     }
 
     #[test]
-    fn test_doc_comment() {
+    #[rustfmt::skip]
+    fn test_doc_comment() -> Result<()> {
         let mut lexer = Lexer::from_source("a \n /// foobar \n b");
 
-        assert_eq!(lexer.next_token().unwrap(), token(Ident, (0, 1)));
-        assert_eq!(lexer.next_token().unwrap(), token(Doc, (4, 12)));
-        assert_eq!(lexer.next_token().unwrap(), token(Ident, (17, 1)));
+        assert_eq!(lexer.next_token()?, token(Ident, (0, 1)));
+        assert_eq!(lexer.next_token()?, token(Doc,   (4, 12)));
+        assert_eq!(lexer.next_token()?, token(Ident, (17, 1)));
+
+        Ok(())
     }
 }
