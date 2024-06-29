@@ -83,6 +83,7 @@ impl<'a> Lexer<'a> {
                     '#' => self.make_token(Hash),
                     ':' => self.make_token(Colon),
                     ';' => self.make_token(Semi),
+                    '%' => self.make_token(Perc),
 
                     '+' => self.make_token(Plus),
                     '-' => self.make_token(Minus),

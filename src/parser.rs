@@ -2,7 +2,7 @@
 use crate::ast::*;
 use crate::errors::{parser_err, Result};
 use crate::lexer::Lexer;
-use crate::token::{LitValue, Precedence, Token, TokenKind};
+use crate::token::{Associativity, LitValue, Precedence, Token, TokenKind};
 use crate::types::TypeId;
 
 macro_rules! trace {
@@ -143,21 +143,25 @@ impl<'a> Parser<'a> {
     ///
     /// The implementation is a straight forward Pratt parser.
     fn parse_precedence(&mut self, precedence: Precedence) -> Result<Expr> {
-        trace!("parse_precedence");
+        trace!("parse_precedence({precedence:?})");
 
         let token = self.next_token()?;
+        trace!("parse_precedence(..); token -> {token:?}");
+
         let mut left = self.parse_prefix(token)?;
 
         while precedence <= self.peek_kind().map(|kind| Precedence::of(kind))? {
             // When thre is no expression right of the last one, we just return what we have.
             let op = self.next_token()?;
-            left = self.parse_infix(left, op)?;
+            left = self.parse_infix(left, op).map(Box::new).map(Expr::Binary)?;
         }
 
         Ok(left)
     }
 
     fn parse_prefix(&mut self, token: Token) -> Result<Expr> {
+        trace!("parse_prefix({token:?})");
+
         use crate::token::{Keyword::*, TokenKind::*};
 
         match token.kind {
@@ -167,8 +171,51 @@ impl<'a> Parser<'a> {
         }
     }
 
-    fn parse_infix(&mut self, _left: Expr, _op: Token) -> Result<Expr> {
-        todo!("parse infix operator")
+    fn parse_infix(&mut self, left: Expr, op: Token) -> Result<BinaryExpr> {
+        use crate::token::TokenKind::*;
+        trace!("parse_infix({left:?}, {op:?})");
+
+        let precedence = Precedence::of(op.kind);
+
+        // Associativity is handled by adjusting the precedence.
+        // Left associativity is achieved by increasing the precedence
+        // by 1. This increases the threshold that any infix expressions
+        // to our right must exceed.
+        //
+        // Right associativity can be achieved by keeping
+        // the precedence the same, thus keeping the threshold any
+        // subsequent infix expression need to exceed to be parsed.
+        let binding_power = if Associativity::of(op.kind).is_left() { 1 } else { 0 };
+
+        // Recurse back into expression parser to handle
+        // the right hand side.
+        //
+        // The left hand side will wait for us here on
+        // the call stack.
+        let right = self.parse_precedence(precedence + binding_power)?;
+
+        match op.kind {
+            // Binary Operations
+            Plus | Minus | Star | Slash | StarStar | Eq | EqEq | NotEq => Ok(BinaryExpr {
+                op: Self::parse_binary_op(op.kind)?,
+                lhs: left,
+                rhs: right,
+            }),
+            _ => parser_err("infix operator expected").into(),
+        }
+    }
+
+    fn parse_binary_op(op_kind: TokenKind) -> Result<BinaryOp> {
+        match op_kind {
+            TokenKind::Plus => Ok(BinaryOp::Add),
+            TokenKind::Minus => Ok(BinaryOp::Sub),
+            TokenKind::Star => Ok(BinaryOp::Mul),
+            TokenKind::Slash => Ok(BinaryOp::Div),
+            TokenKind::Perc => Ok(BinaryOp::Mod),
+            TokenKind::StarStar => Ok(BinaryOp::Exp),
+            TokenKind::Eq => Ok(BinaryOp::Assign),
+            _ => parser_err("invalid token for binary operation").into(),
+        }
     }
 
     fn parse_num_lit(&mut self, token: Token) -> Result<Number> {

@@ -89,6 +89,8 @@ pub enum BinaryOp {
     Mul,
     Div,
     Mod,
+    Exp,
+    Assign,
 }
 
 /// Function definition literal.

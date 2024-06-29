@@ -17,3 +17,4 @@ fxhash = "0.2"
 
 [features]
 trace_lexer = []
+trace_parser = []

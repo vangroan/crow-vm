@@ -27,7 +27,7 @@ pub fn compile(source: &str, filename: &str) -> self::errors::Result<()> {
     let lexer = self::lexer::Lexer::new(source, filename);
     let mut parser = self::parser::Parser::new(lexer);
     let block = parser.parse_module()?;
-    println!("Syntax Tree:\n{block:?}");
+    println!("Syntax Tree:\n{block:#?}");
     let mut checker = self::typechecker::TypeChecker::new();
     let _ = checker.check_block(&block)?;
 

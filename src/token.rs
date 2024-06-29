@@ -80,14 +80,15 @@ impl Span {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[rustfmt::skip]
 pub enum TokenKind {
-    Comma,   // ,
-    Dot,     // .
-    Eq,      // =
-    EqEq,    // ==
-    NotEq,   // !=
-    Hash,    // #
-    Colon,   // :
-    Semi,    // ;
+    Comma,    // ,
+    Dot,      // .
+    Eq,       // =
+    EqEq,     // ==
+    NotEq,    // !=
+    Hash,     // #
+    Colon,    // :
+    Semi,     // ;
+    Perc,     // %
 
     Plus,     // +
     Minus,    // -
@@ -153,8 +154,9 @@ pub enum Precedence {
     Term = 14,         // + -
     Factor = 15,       // * / %
     Unary = 16,        // - ! ~
-    Call = 17,         // . () []
-    Primary = 18,
+    Exponent = 17,     // **
+    Call = 18,         // . () []
+    Primary = 19,
 }
 
 impl Precedence {
@@ -172,6 +174,7 @@ impl Precedence {
             Num | Ident => Precedence::Lowest,
             Plus | Minus => Precedence::Term,
             Star | Slash => Precedence::Factor,
+            StarStar => Precedence::Exponent,
             Eq => Precedence::Assignment,
             EqEq => Precedence::Equality,
             Dot | ParenLeft | BracketLeft => Precedence::Call,
@@ -208,8 +211,9 @@ impl From<i32> for Precedence {
             14 => P::Term,
             15 => P::Factor,
             16 => P::Unary,
-            17 => P::Call,
-            18 => P::Primary,
+            17 => P::Exponent,
+            18 => P::Call,
+            19 => P::Primary,
             _  => P::None,
         }
     }
@@ -231,22 +235,23 @@ impl std::ops::Add<i32> for Precedence {
 
 /// Associativity is the precedence tie-breaker.
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
-enum Associativity {
+pub enum Associativity {
     Left,
     Right,
 }
 
 impl Associativity {
     /// Determine the associativity of the given token kind.
-    fn of(token_ty: TokenKind) -> Associativity {
-        if token_ty == TokenKind::Eq {
+    pub fn of(token_ty: TokenKind) -> Associativity {
+        // Assignment and exponent are right associative.
+        if matches!(token_ty, TokenKind::Eq | TokenKind::StarStar) {
             Associativity::Right
         } else {
             Associativity::Left
         }
     }
 
-    fn is_left(&self) -> bool {
+    pub fn is_left(&self) -> bool {
         *self == Associativity::Left
     }
 }

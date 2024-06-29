@@ -6,5 +6,4 @@ fn test_core_hello_world() {
 #[test]
 fn test_local_arithmetic() {
     crow::compile_file("tests/language/local/arithmetic.crow").unwrap();
-    panic!()
 }
