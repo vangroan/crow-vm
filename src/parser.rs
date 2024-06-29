@@ -5,6 +5,7 @@ use crate::lexer::Lexer;
 use crate::token::{Token, TokenKind};
 use crate::types::TypeId;
 
+/// Syntactic parser.
 pub struct Parser<'a> {
     lexer: Lexer<'a>,
     /// The current token, if the next has been peeked.
@@ -133,5 +134,9 @@ impl<'a> Parser<'a> {
         Ok(Ident {
             text: fragment.to_string(),
         })
+    }
+
+    fn parse_func_lit(&mut self) -> Result<FuncLit> {
+        todo!("parse function literal")
     }
 }

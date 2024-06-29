@@ -66,14 +66,33 @@ impl<'a> Lexer<'a> {
 
                     ',' => self.make_token(Comma),
                     '.' => self.make_token(Dot),
-                    '=' => self.make_token(Eq),
+                    '=' => {
+                        if self.match_char('=') {
+                            self.make_token(EqEq)
+                        } else {
+                            self.make_token(Eq)
+                        }
+                    }
+                    '!' => {
+                        if self.match_char('=') {
+                            self.make_token(NotEq)
+                        } else {
+                            return lexer_err(format!("unexpected character {ch:?}")).into();
+                        }
+                    }
                     '#' => self.make_token(Hash),
                     ':' => self.make_token(Colon),
                     ';' => self.make_token(Semi),
 
                     '+' => self.make_token(Plus),
                     '-' => self.make_token(Minus),
-                    '*' => self.make_token(Star),
+                    '*' => {
+                        if self.match_char('*') {
+                            self.make_token(StarStar)
+                        } else {
+                            self.make_token(Star)
+                        }
+                    }
                     '/' => {
                         if self.match_char('/') {
                             if self.match_char('/') {
@@ -96,6 +115,21 @@ impl<'a> Lexer<'a> {
                     '}' => self.make_token(BraceRight),
                     '[' => self.make_token(BracketLeft),
                     ']' => self.make_token(BracketRight),
+
+                    '<' => {
+                        if self.match_char('=') {
+                            self.make_token(LessEq)
+                        } else {
+                            self.make_token(Less)
+                        }
+                    }
+                    '>' => {
+                        if self.match_char('=') {
+                            self.make_token(GreatEq)
+                        } else {
+                            self.make_token(Great)
+                        }
+                    }
 
                     '"' => self.lex_string_literal(),
 
@@ -305,6 +339,7 @@ impl<'a> Lexer<'a> {
 mod test {
     use super::*;
     use crate::errors::Result;
+    use crate::token::Keyword::*;
     use crate::token::TokenKind::*;
 
     /// Shorthand convenience function for creating a token.
@@ -312,8 +347,13 @@ mod test {
         Token::new(kind, Span(span.0, span.1))
     }
 
+    /// Shorthand convenience function for creating a keyword token.
+    fn keyword(kind: crate::token::Keyword, span: (u32, u32)) -> Token {
+        Token::new(TokenKind::Keyword(kind), Span(span.0, span.1))
+    }
+
     #[test]
-    fn test_tokenisation() {
+    fn test_tokenisation_punctuation() {
         let mut lexer = Lexer::from_source(", . = # ;");
 
         assert_eq!(lexer.next_token().unwrap(), token(Comma, (0, 1)));
@@ -321,6 +361,54 @@ mod test {
         assert_eq!(lexer.next_token().unwrap(), token(Eq, (4, 1)));
         assert_eq!(lexer.next_token().unwrap(), token(Hash, (6, 1)));
         assert_eq!(lexer.next_token().unwrap(), token(Semi, (8, 1)));
+    }
+
+    #[test]
+    fn test_tokenisation_operators() {
+        let mut lexer = Lexer::from_source("+ - * /");
+
+        assert_eq!(lexer.next_token().unwrap(), token(Plus, (0, 1)));
+        assert_eq!(lexer.next_token().unwrap(), token(Minus, (2, 1)));
+        assert_eq!(lexer.next_token().unwrap(), token(Star, (4, 1)));
+        assert_eq!(lexer.next_token().unwrap(), token(Slash, (6, 1)));
+    }
+
+    #[test]
+    fn test_tokenisation_enclosing() {
+        let mut lexer = Lexer::from_source("( ) { } [ ]");
+
+        assert_eq!(lexer.next_token().unwrap(), token(ParenLeft, (0, 1)));
+        assert_eq!(lexer.next_token().unwrap(), token(ParenRight, (2, 1)));
+        assert_eq!(lexer.next_token().unwrap(), token(BraceLeft, (4, 1)));
+        assert_eq!(lexer.next_token().unwrap(), token(BraceRight, (6, 1)));
+        assert_eq!(lexer.next_token().unwrap(), token(BracketLeft, (8, 1)));
+        assert_eq!(lexer.next_token().unwrap(), token(BracketRight, (10, 1)));
+    }
+
+    #[test]
+    fn test_tokenisation_comparison() {
+        let mut lexer = Lexer::from_source("< <= > >=");
+
+        assert_eq!(lexer.next_token().unwrap(), token(Less, (0, 1)));
+        assert_eq!(lexer.next_token().unwrap(), token(LessEq, (2, 2)));
+        assert_eq!(lexer.next_token().unwrap(), token(Great, (5, 1)));
+        assert_eq!(lexer.next_token().unwrap(), token(GreatEq, (7, 2)));
+    }
+
+    #[test]
+    fn test_tokenisation_keywords() -> Result<()> {
+        let mut lexer = Lexer::from_source("fn for let if import struct type while");
+
+        assert_eq!(lexer.next_token()?, keyword(Fn, (0, 2)));
+        assert_eq!(lexer.next_token()?, keyword(For, (3, 3)));
+        assert_eq!(lexer.next_token()?, keyword(Let, (7, 3)));
+        assert_eq!(lexer.next_token()?, keyword(If, (11, 2)));
+        assert_eq!(lexer.next_token()?, keyword(Import, (14, 6)));
+        assert_eq!(lexer.next_token()?, keyword(Struct, (21, 6)));
+        assert_eq!(lexer.next_token()?, keyword(Type, (28, 4)));
+        assert_eq!(lexer.next_token()?, keyword(While, (33, 5)));
+
+        Ok(())
     }
 
     #[test]

@@ -70,7 +70,7 @@ pub struct TupleItem {
 pub enum Expr {
     Binary(Box<BinaryExpr>),
     Lit(Box<Literal>),
-    Func(Box<FuncExpr>),
+    Func(Box<FuncLit>),
     /// Call to a closure.
     Call(Box<CallExpr>),
 }
@@ -91,8 +91,9 @@ pub enum BinaryOp {
     Mod,
 }
 
+/// Function definition literal.
 #[derive(Debug)]
-pub struct FuncExpr {
+pub struct FuncLit {
     pub ty: TypeId,
     pub args: Vec<Arg>,
     pub return_: Tuple,

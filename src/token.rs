@@ -83,14 +83,17 @@ pub enum TokenKind {
     Comma,   // ,
     Dot,     // .
     Eq,      // =
+    EqEq,    // ==
+    NotEq,   // !=
     Hash,    // #
     Colon,   // :
     Semi,    // ;
 
-    Plus,    // +
-    Minus,   // -
-    Star,    // *
-    Slash,   // /
+    Plus,     // +
+    Minus,    // -
+    Star,     // *
+    StarStar, // **
+    Slash,    // /
 
     ParenLeft,    // (
     ParenRight,   // )
