@@ -64,6 +64,8 @@ impl<'a> Lexer<'a> {
                     '0'..='9' => self.lex_number()?,
                     'a'..='z' | 'A'..='Z' => self.lex_ident(),
 
+                    // --------------------------------------------------------
+                    // Punctuation
                     ',' => self.make_token(Comma),
                     '.' => self.make_token(Dot),
                     '=' => {
@@ -85,6 +87,8 @@ impl<'a> Lexer<'a> {
                     ';' => self.make_token(Semi),
                     '%' => self.make_token(Perc),
 
+                    // --------------------------------------------------------
+                    // Operators
                     '+' => self.make_token(Plus),
                     '-' => self.make_token(Minus),
                     '*' => {
@@ -95,6 +99,7 @@ impl<'a> Lexer<'a> {
                         }
                     }
                     '/' => {
+                        // Comments
                         if self.match_char('/') {
                             if self.match_char('/') {
                                 self.lex_doc_comment()
@@ -110,13 +115,18 @@ impl<'a> Lexer<'a> {
                         }
                     }
 
+                    // --------------------------------------------------------
+                    // Enclosures
                     '(' => self.make_token(ParenLeft),
                     ')' => self.make_token(ParenRight),
                     '{' => self.make_token(BraceLeft),
                     '}' => self.make_token(BraceRight),
                     '[' => self.make_token(BracketLeft),
                     ']' => self.make_token(BracketRight),
+                    '"' => self.lex_string_literal(),
 
+                    // --------------------------------------------------------
+                    // Comparison
                     '<' => {
                         if self.match_char('=') {
                             self.make_token(LessEq)
@@ -131,8 +141,6 @@ impl<'a> Lexer<'a> {
                             self.make_token(Great)
                         }
                     }
-
-                    '"' => self.lex_string_literal(),
 
                     _ => return lexer_err(format!("unexpected character {ch:?}")).into(),
                 },
@@ -361,80 +369,97 @@ mod test {
     }
 
     #[test]
-    fn test_tokenisation_punctuation() {
+    #[rustfmt::skip]
+    fn test_tokenisation_punctuation() -> Result<()> {
         let mut lexer = Lexer::from_source(", . = # ;");
 
-        assert_eq!(lexer.next_token().unwrap(), token(Comma, (0, 1)));
-        assert_eq!(lexer.next_token().unwrap(), token(Dot, (2, 1)));
-        assert_eq!(lexer.next_token().unwrap(), token(Eq, (4, 1)));
-        assert_eq!(lexer.next_token().unwrap(), token(Hash, (6, 1)));
-        assert_eq!(lexer.next_token().unwrap(), token(Semi, (8, 1)));
-    }
-
-    #[test]
-    fn test_tokenisation_operators() {
-        let mut lexer = Lexer::from_source("+ - * /");
-
-        assert_eq!(lexer.next_token().unwrap(), token(Plus, (0, 1)));
-        assert_eq!(lexer.next_token().unwrap(), token(Minus, (2, 1)));
-        assert_eq!(lexer.next_token().unwrap(), token(Star, (4, 1)));
-        assert_eq!(lexer.next_token().unwrap(), token(Slash, (6, 1)));
-    }
-
-    #[test]
-    fn test_tokenisation_enclosing() {
-        let mut lexer = Lexer::from_source("( ) { } [ ]");
-
-        assert_eq!(lexer.next_token().unwrap(), token(ParenLeft, (0, 1)));
-        assert_eq!(lexer.next_token().unwrap(), token(ParenRight, (2, 1)));
-        assert_eq!(lexer.next_token().unwrap(), token(BraceLeft, (4, 1)));
-        assert_eq!(lexer.next_token().unwrap(), token(BraceRight, (6, 1)));
-        assert_eq!(lexer.next_token().unwrap(), token(BracketLeft, (8, 1)));
-        assert_eq!(lexer.next_token().unwrap(), token(BracketRight, (10, 1)));
-    }
-
-    #[test]
-    fn test_tokenisation_comparison() {
-        let mut lexer = Lexer::from_source("< <= > >=");
-
-        assert_eq!(lexer.next_token().unwrap(), token(Less, (0, 1)));
-        assert_eq!(lexer.next_token().unwrap(), token(LessEq, (2, 2)));
-        assert_eq!(lexer.next_token().unwrap(), token(Great, (5, 1)));
-        assert_eq!(lexer.next_token().unwrap(), token(GreatEq, (7, 2)));
-    }
-
-    #[test]
-    fn test_tokenisation_keywords() -> Result<()> {
-        let mut lexer = Lexer::from_source("and fn for let if import or struct type while");
-
-        assert_eq!(lexer.next_token()?, keyword(And, (0, 3)));
-        assert_eq!(lexer.next_token()?, keyword(Fn, (4, 2)));
-        assert_eq!(lexer.next_token()?, keyword(For, (7, 3)));
-        assert_eq!(lexer.next_token()?, keyword(Let, (11, 3)));
-        assert_eq!(lexer.next_token()?, keyword(If, (15, 2)));
-        assert_eq!(lexer.next_token()?, keyword(Import, (18, 6)));
-        assert_eq!(lexer.next_token()?, keyword(Or, (25, 2)));
-        assert_eq!(lexer.next_token()?, keyword(Struct, (28, 6)));
-        assert_eq!(lexer.next_token()?, keyword(Type, (35, 4)));
-        assert_eq!(lexer.next_token()?, keyword(While, (40, 5)));
+        assert_eq!(lexer.next_token()?, token(Comma, (0, 1)));
+        assert_eq!(lexer.next_token()?, token(Dot,   (2, 1)));
+        assert_eq!(lexer.next_token()?, token(Eq,    (4, 1)));
+        assert_eq!(lexer.next_token()?, token(Hash,  (6, 1)));
+        assert_eq!(lexer.next_token()?, token(Semi,  (8, 1)));
 
         Ok(())
     }
 
     #[test]
-    fn test_ignore_line_comment() {
-        let mut lexer = Lexer::from_source("a \n //foobar \n b");
+    #[rustfmt::skip]
+    fn test_tokenisation_operators() -> Result<()> {
+        let mut lexer = Lexer::from_source("+ - * /");
 
-        assert_eq!(lexer.next_token().unwrap(), token(Ident, (0, 1)));
-        assert_eq!(lexer.next_token().unwrap(), token(Ident, (15, 1)));
+        assert_eq!(lexer.next_token()?, token(Plus,  (0, 1)));
+        assert_eq!(lexer.next_token()?, token(Minus, (2, 1)));
+        assert_eq!(lexer.next_token()?, token(Star,  (4, 1)));
+        assert_eq!(lexer.next_token()?, token(Slash, (6, 1)));
+
+        Ok(())
     }
 
     #[test]
-    fn test_ignore_block_comment() {
+    #[rustfmt::skip]
+    fn test_tokenisation_enclosing() -> Result<()> {
+        let mut lexer = Lexer::from_source("( ) { } [ ]");
+
+        assert_eq!(lexer.next_token()?, token(ParenLeft,    (0, 1)));
+        assert_eq!(lexer.next_token()?, token(ParenRight,   (2, 1)));
+        assert_eq!(lexer.next_token()?, token(BraceLeft,    (4, 1)));
+        assert_eq!(lexer.next_token()?, token(BraceRight,   (6, 1)));
+        assert_eq!(lexer.next_token()?, token(BracketLeft,  (8, 1)));
+        assert_eq!(lexer.next_token()?, token(BracketRight, (10, 1)));
+
+        Ok(())
+    }
+
+    #[test]
+    #[rustfmt::skip]
+    fn test_tokenisation_comparison() -> Result<()> {
+        let mut lexer = Lexer::from_source("< <= > >=");
+
+        assert_eq!(lexer.next_token()?, token(Less,    (0, 1)));
+        assert_eq!(lexer.next_token()?, token(LessEq,  (2, 2)));
+        assert_eq!(lexer.next_token()?, token(Great,   (5, 1)));
+        assert_eq!(lexer.next_token()?, token(GreatEq, (7, 2)));
+
+        Ok(())
+    }
+
+    #[test]
+    #[rustfmt::skip]
+    fn test_tokenisation_keywords() -> Result<()> {
+        let mut lexer = Lexer::from_source("and fn for let if import or struct type while");
+
+        assert_eq!(lexer.next_token()?, keyword(And,    (0, 3)));
+        assert_eq!(lexer.next_token()?, keyword(Fn,     (4, 2)));
+        assert_eq!(lexer.next_token()?, keyword(For,    (7, 3)));
+        assert_eq!(lexer.next_token()?, keyword(Let,    (11, 3)));
+        assert_eq!(lexer.next_token()?, keyword(If,     (15, 2)));
+        assert_eq!(lexer.next_token()?, keyword(Import, (18, 6)));
+        assert_eq!(lexer.next_token()?, keyword(Or,     (25, 2)));
+        assert_eq!(lexer.next_token()?, keyword(Struct, (28, 6)));
+        assert_eq!(lexer.next_token()?, keyword(Type,   (35, 4)));
+        assert_eq!(lexer.next_token()?, keyword(While,  (40, 5)));
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_ignore_line_comment() -> Result<()> {
+        let mut lexer = Lexer::from_source("a \n //foobar \n b");
+
+        assert_eq!(lexer.next_token()?, token(Ident, (0, 1)));
+        assert_eq!(lexer.next_token()?, token(Ident, (15, 1)));
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_ignore_block_comment() -> Result<()> {
         let mut lexer = Lexer::from_source("a \n /* foobar */ \n b");
 
-        assert_eq!(lexer.next_token().unwrap(), token(Ident, (0, 1)));
-        assert_eq!(lexer.next_token().unwrap(), token(Ident, (19, 1)));
+        assert_eq!(lexer.next_token()?, token(Ident, (0, 1)));
+        assert_eq!(lexer.next_token()?, token(Ident, (19, 1)));
+
+        Ok(())
     }
 
     #[test]
