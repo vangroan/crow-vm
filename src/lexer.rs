@@ -61,7 +61,7 @@ impl<'a> Lexer<'a> {
 
             let token = match self.bump() {
                 Some((_, ch)) => match ch {
-                    '0'..='9' => self.lex_number(),
+                    '0'..='9' => self.lex_number()?,
                     'a'..='z' | 'A'..='Z' => self.lex_ident(),
 
                     ',' => self.make_token(Comma),
@@ -271,11 +271,13 @@ impl<'a> Lexer<'a> {
         use crate::token::Keyword::*;
 
         match self.fragment() {
+            "and"    => Some(And),
             "fn"     => Some(Fn),
             "for"    => Some(For),
             "let"    => Some(Let),
             "if"     => Some(If),
             "import" => Some(Import),
+            "or"     => Some(Or),
             "struct" => Some(Struct),
             "type"   => Some(Type),
             "while"  => Some(While),
@@ -284,7 +286,7 @@ impl<'a> Lexer<'a> {
     }
 
     /// Numbers are sequences of digits.
-    fn lex_number(&mut self) -> Token {
+    fn lex_number(&mut self) -> Result<Token> {
         // trace!("    lex_number()");
 
         while let Some(ch) = self.peek() {
@@ -295,7 +297,12 @@ impl<'a> Lexer<'a> {
             }
         }
 
-        self.make_token(TokenKind::Num)
+        let fragment = self.fragment();
+        let value = i64::from_str_radix(fragment, 10)
+            .map(LitValue::Int)
+            .map_err(|err| lexer_err(format!("failed to parser number literal: {err}")))?;
+
+        Ok(self.make_literal(TokenKind::Num, value))
     }
 
     /// Identifiers start with a letter or underscore,
@@ -312,7 +319,7 @@ impl<'a> Lexer<'a> {
         }
 
         let kind = match self.try_keyword() {
-            Some(keyword) => TokenKind::Keyword(keyword),
+            Some(keyword) => TokenKind::Kw(keyword),
             None => TokenKind::Ident,
         };
 
@@ -349,7 +356,7 @@ mod test {
 
     /// Shorthand convenience function for creating a keyword token.
     fn keyword(kind: crate::token::Keyword, span: (u32, u32)) -> Token {
-        Token::new(TokenKind::Keyword(kind), Span(span.0, span.1))
+        Token::new(TokenKind::Kw(kind), Span(span.0, span.1))
     }
 
     #[test]
@@ -397,16 +404,18 @@ mod test {
 
     #[test]
     fn test_tokenisation_keywords() -> Result<()> {
-        let mut lexer = Lexer::from_source("fn for let if import struct type while");
+        let mut lexer = Lexer::from_source("and fn for let if import or struct type while");
 
-        assert_eq!(lexer.next_token()?, keyword(Fn, (0, 2)));
-        assert_eq!(lexer.next_token()?, keyword(For, (3, 3)));
-        assert_eq!(lexer.next_token()?, keyword(Let, (7, 3)));
-        assert_eq!(lexer.next_token()?, keyword(If, (11, 2)));
-        assert_eq!(lexer.next_token()?, keyword(Import, (14, 6)));
-        assert_eq!(lexer.next_token()?, keyword(Struct, (21, 6)));
-        assert_eq!(lexer.next_token()?, keyword(Type, (28, 4)));
-        assert_eq!(lexer.next_token()?, keyword(While, (33, 5)));
+        assert_eq!(lexer.next_token()?, keyword(And, (0, 3)));
+        assert_eq!(lexer.next_token()?, keyword(Fn, (4, 2)));
+        assert_eq!(lexer.next_token()?, keyword(For, (7, 3)));
+        assert_eq!(lexer.next_token()?, keyword(Let, (11, 3)));
+        assert_eq!(lexer.next_token()?, keyword(If, (15, 2)));
+        assert_eq!(lexer.next_token()?, keyword(Import, (18, 6)));
+        assert_eq!(lexer.next_token()?, keyword(Or, (25, 2)));
+        assert_eq!(lexer.next_token()?, keyword(Struct, (28, 6)));
+        assert_eq!(lexer.next_token()?, keyword(Type, (35, 4)));
+        assert_eq!(lexer.next_token()?, keyword(While, (40, 5)));
 
         Ok(())
     }

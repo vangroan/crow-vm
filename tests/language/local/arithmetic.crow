@@ -1,6 +1,7 @@
 
 // Assigning arithmetic expression to local variable.
-let x = 1 + 2;
+let x = 2;
+// let x = 1 + 2;
 
 // Declare variable with implicit default value.
-let y: Int;
+// let y: Int;
