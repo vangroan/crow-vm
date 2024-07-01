@@ -68,11 +68,21 @@ pub struct TupleItem {
 /// Expressions.
 #[derive(Debug)]
 pub enum Expr {
+    Name(Box<NameAccessExpr>),
     Binary(Box<BinaryExpr>),
     Lit(Box<Literal>),
     Func(Box<FuncLit>),
     /// Call to a closure.
     Call(Box<CallExpr>),
+}
+
+/// Name access expression.
+///
+/// This is a simple, bare identifier in an expression
+/// for accessing a variable.
+#[derive(Debug)]
+pub struct NameAccessExpr {
+    pub ident: Ident,
 }
 
 #[derive(Debug)]

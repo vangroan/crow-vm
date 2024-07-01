@@ -132,6 +132,7 @@ impl TypeChecker {
     /// Type check the given expression node.
     pub fn check_expr(&mut self, expr: &Expr) -> Result<TypeId> {
         match expr {
+            Expr::Name(_) => todo!(),
             Expr::Binary(binary_expr) => self.check_binary_expr(binary_expr),
             Expr::Lit(literal) => Ok(literal.type_id()),
             Expr::Func(_) => todo!(),

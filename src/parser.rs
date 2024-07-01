@@ -166,6 +166,9 @@ impl<'a> Parser<'a> {
 
         match token.kind {
             Num => self.parse_num_lit(token).map(Literal::Num).map(Box::new).map(Expr::Lit),
+            Ident => self.parse_postfix(token),
+            BracketLeft => todo!("array literal"),
+            BraceLeft => todo!("table literal"),
             Kw(Fn) => self.parse_func_lit().map(Box::new).map(Expr::Func),
             _ => parser_err("expression expected").into(),
         }
@@ -205,6 +208,38 @@ impl<'a> Parser<'a> {
         }
     }
 
+    /// Parse a postfix expression.
+    fn parse_postfix(&mut self, token: Token) -> Result<Expr> {
+        trace!("parse_postfix({token:?})");
+        assert_eq!(
+            token.kind,
+            TokenKind::Ident,
+            "a postfix expression must start with an identifier"
+        );
+
+        // The parselet is triggered by encountering an identifier
+        // in an expression as a prefix.
+        //
+        // The simplest case is the expression is referencing a variable.
+        let mut _expr = Expr::Name(Box::new(NameAccessExpr {
+            ident: self.make_ident(&token),
+        }));
+
+        // Keep parsing the rest of the expression to transform `expr`
+        // into something else.
+        loop {
+            match self.peek_kind()? {
+                TokenKind::Eq => todo!("assignment"),
+                TokenKind::BracketLeft => todo!("subscript"),
+                TokenKind::ParenLeft => todo!("call"),
+                TokenKind::Dot => todo!("member access"),
+                _ => break,
+            }
+        }
+
+        todo!("postfix expression")
+    }
+
     fn parse_binary_op(op_kind: TokenKind) -> Result<BinaryOp> {
         match op_kind {
             TokenKind::Plus => Ok(BinaryOp::Add),
@@ -229,10 +264,14 @@ impl<'a> Parser<'a> {
 
     fn parse_ident(&mut self) -> Result<Ident> {
         let token = self.consume_token(TokenKind::Ident)?;
+        Ok(self.make_ident(&token))
+    }
+
+    fn make_ident(&self, token: &Token) -> Ident {
         let fragment = token.span.fragment(self.lexer.text());
-        Ok(Ident {
+        Ident {
             text: fragment.to_string(),
-        })
+        }
     }
 
     fn parse_func_lit(&mut self) -> Result<FuncLit> {

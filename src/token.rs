@@ -229,7 +229,7 @@ impl std::ops::Add<i32> for Precedence {
     type Output = Precedence;
 
     fn add(self, rhs: i32) -> Self::Output {
-        Precedence::try_from(self.as_i32() + rhs).unwrap()
+        Precedence::from(self.as_i32() + rhs)
     }
 }
 
